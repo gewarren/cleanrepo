@@ -11,3 +11,5 @@ The not-in-toc.exe utility accepts a single input, that is a path to a Windows d
 - Show topics that appear in more than 1 TOC file.
 - Show topics that appear multiple times in the same TOC.
 - Group different types of output, e.g. files not in a TOC, then files with same name but different path in TOC.
+- Show image files that aren't linked to anywhere.
+- Show include files that aren't linked to anywhere.
