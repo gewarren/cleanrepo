@@ -13,3 +13,5 @@ The not-in-toc.exe utility accepts a single input, that is a path to a Windows d
 - Group different types of output, e.g. files not in a TOC, then files with same name but different path in TOC.
 - Show image files that aren't linked to anywhere.
 - Show include files that aren't linked to anywhere.
+- Show files in TOCs that have redirect_urls. (Note: should this handle central redirect files too?)
+- Do a friendly diff of two TOC files: number of topics in each, topics in one file but not the other, sub-node comparisons, (nodes that have a link in one file but not the other)
