@@ -50,7 +50,23 @@ namespace NotInToc
         /// </summary>
         private static void ListPopularFiles(List<FileInfo> tocFiles, List<FileInfo> markdownFiles)
         {
-            throw new NotImplementedException();
+            // Keep a hash table of each topic path with the number of times it's referenced
+            Dictionary<FileInfo, int> topics = new Dictionary<FileInfo, int>(markdownFiles.Count);
+
+            foreach (var markdownFile in markdownFiles)
+            {
+                // If the file is in the Includes directory, ignore it
+                if (markdownFile.FullName.Contains("\\includes\\"))
+                    continue;
+
+                foreach (var tocFile in tocFiles)
+                {
+                    if (IsInToc(markdownFile, tocFile))
+                    {
+                        topics[tocFile]++;
+                    }
+                }
+            }
         }
 
         /// <summary>
@@ -59,49 +75,110 @@ namespace NotInToc
         /// </summary>
         private static void ListFilesNotInToc(List<FileInfo> tocFiles, List<FileInfo> markdownFiles, bool ignoreFilesWithRedirectUrl = true)
         {
-            int count = 0;
+            int countNotFound = 0;
 
             foreach (var markdownFile in markdownFiles)
             {
-                // If the file is in the Includes directory, ignore it
-                // If the file is a TOC itself, ignore it
+                bool found = false;
+
+                // If the file is in the Includes directory, or the file is a TOC itself, ignore it
                 if (markdownFile.FullName.Contains("\\includes\\") || String.Compare(markdownFile.Name, "TOC.md") == 0)
                     continue;
 
-                if (!IsInToc(markdownFile, tocFiles))
+                foreach (var tocFile in tocFiles)
                 {
-                    // If we're ignoring files with redirect_url metadata tags,
-                    // see if this file has a redirect_url tag.
+                    if (!IsInToc(markdownFile, tocFile))
+                    {
+                        continue;
+                    }
+
+                    found = true;
+                    break;
+                }
+
+                if (!found)
+                {
+                    bool redirect = false;
+
+                    // Check if the topic has a redirect_url tag
                     if (ignoreFilesWithRedirectUrl)
                     {
-                        bool redirect = false;
-
-                        foreach (var line in File.ReadAllLines(markdownFile.FullName))
-                        {
-                            // If the file has a redirect_url metadata tag, set a flag
-                            if (line.Contains("redirect_url:"))
-                            {
-                                redirect = true;
-                                break;
-                            }
-                        }
-
-                        // If the file doesn't have a redirect_url tag, report it
-                        if (!redirect)
-                        {
-                            count++;
-                            Console.WriteLine($"File '{markdownFile.FullName}' is not in any TOC file");
-                        }
+                        redirect = FileContainsRedirectUrl(markdownFile);
                     }
-                    else
+
+                    // If it's not a redirected topic, or we're not ignoring redirected topic, report this file.
+                    if (!redirect)
                     {
-                        count++;
+                        countNotFound++;
                         Console.WriteLine($"File '{markdownFile.FullName}' is not in any TOC file");
                     }
                 }
             }
 
-            Console.WriteLine($"\n{count} total files not in a TOC.");
+            Console.WriteLine($"\nFound {countNotFound} total .md files that are not in a TOC.");
+        }
+
+        /// <summary>
+        /// Checks if the specified file PATH is referenced in a TOC.md file.
+        /// </summary>
+        private static bool IsInToc(FileInfo markdownFile, FileInfo tocFile, bool outputSimilarities = false)
+        {
+            // Read all the .md files listed in the TOC file
+            foreach (string line in File.ReadAllLines(tocFile.FullName))
+            {
+                if (line.Contains("](") == false)
+                    // line doesn't contain a file reference
+                    continue;
+
+                int startOfPath = line.IndexOf("](") + 2;
+                int startOfFileName = line.LastIndexOf('/') + 1;
+                if (startOfFileName == 0)
+                {
+                    // There's no '/' in the path to the file
+                    startOfFileName = startOfPath;
+                }
+
+                string fileNameInToc = line.Substring(startOfFileName, line.LastIndexOf(')') - startOfFileName);
+
+                // If the file name is somewhere in the line of text...
+                if (String.Compare(markdownFile.Name, fileNameInToc) == 0)
+                {
+                    // Now verify the file path to ensure we're talking about the same file
+                    string relativePath = line.Substring(startOfPath, line.LastIndexOf(')') - startOfPath).Replace('/', '\\');
+
+                    DirectoryInfo rootPath = tocFile.Directory;
+                    while (relativePath.StartsWith(".."))
+                    {
+                        // Go up one level in the root path.
+                        rootPath = rootPath.Parent;
+
+                        // Remove "..\" from relative path.
+                        relativePath = relativePath.Substring(3);
+                    }
+
+                    string fullPath = String.Concat(rootPath.FullName, "\\", relativePath);
+
+                    // See if our constructed path matches the actual file we think it is
+                    if (String.Compare(fullPath, markdownFile.FullName) == 0)
+                    {
+                        return true;
+                    }
+                    else
+                    {
+                        if (outputSimilarities)
+                        {
+                            // We expect a lot of index.md names, so no need to spit out all similarities
+                            if (markdownFile.Name != "index.md")
+                            {
+                                Console.WriteLine($"File '{markdownFile.FullName}' has same file name as a file in {tocFile.FullName}: '{line}'");
+                            }
+                        }
+                    }
+                }
+            }
+
+            // We did not find this file in any TOC file.
+            return false;
         }
 
         /// <summary>
@@ -116,72 +193,6 @@ namespace NotInToc
                 {
                     if (line.Contains(markdownFile))
                         return true;
-                }
-            }
-
-            // We did not find this file in any TOC file.
-            return false;
-        }
-
-        /// <summary>
-        /// Checks if the specified file PATH is referenced in a TOC.md file.
-        /// </summary>
-        private static bool IsInToc(FileInfo markdownFile, List<FileInfo> tocFiles, bool outputSimilarities = false)
-        {
-            foreach (var tocFile in tocFiles)
-            {
-                // Read all the .md files listed in the TOC file
-                foreach (string line in File.ReadAllLines(tocFile.FullName))
-                {
-                    if (line.Contains("](") == false)
-                        // line doesn't contain a file reference
-                        continue;
-
-                    int startOfPath = line.IndexOf("](") + 2;
-                    int startOfFileName = line.LastIndexOf('/') + 1;
-                    if (startOfFileName == 0)
-                    {
-                        // There's no '/' in the path to the file
-                        startOfFileName = startOfPath;
-                    }
-
-                    string fileNameInToc = line.Substring(startOfFileName, line.LastIndexOf(')') - startOfFileName);
-
-                    // If the file name is somewhere in the line of text...
-                    if (String.Compare(markdownFile.Name, fileNameInToc) == 0)
-                    {
-                        // Now verify the file path to ensure we're talking about the same file
-                        string relativePath = line.Substring(startOfPath, line.LastIndexOf(')') - startOfPath).Replace('/', '\\');
-
-                        DirectoryInfo rootPath = tocFile.Directory;
-                        while (relativePath.StartsWith(".."))
-                        {
-                            // Go up one level in the root path.
-                            rootPath = rootPath.Parent;
-
-                            // Remove "..\" from relative path.
-                            relativePath = relativePath.Substring(3);
-                        }
-
-                        string fullPath = String.Concat(rootPath.FullName, "\\", relativePath);
-
-                        // See if our constructed path matches the actual file we think it is
-                        if (String.Compare(fullPath, markdownFile.FullName) == 0)
-                        {
-                            return true;
-                        }
-                        else
-                        {
-                            if (outputSimilarities)
-                            {
-                                // We expect a lot of index.md names, so no need to spit out all similarities
-                                if (markdownFile.Name != "index.md")
-                                {
-                                    Console.WriteLine($"File '{markdownFile.FullName}' has same file name as a file in {tocFile.FullName}: '{line}'");
-                                }
-                            }
-                        }
-                    }
                 }
             }
 
@@ -220,6 +231,20 @@ namespace NotInToc
             }
 
             return dir.EnumerateFiles("TOC.md", SearchOption.AllDirectories).ToList();
+        }
+
+        private static bool FileContainsRedirectUrl(FileInfo markdownFile)
+        {
+            foreach (var line in File.ReadAllLines(markdownFile.FullName))
+            {
+                // If the file has a redirect_url metadata tag, return true
+                if (line.Contains("redirect_url:"))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 }
