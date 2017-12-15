@@ -9,22 +9,48 @@ namespace NotInToc
     {
         static void Main(string[] args)
         {
-            if (args.Length == 0)
+            // Command line options
+            var options = new Options();
+
+            if (CommandLine.Parser.Default.ParseArguments(args, options))
             {
-                Console.WriteLine("Usage: NotInToc.exe <directory path>");
-                return;
+                // Find orphaned topics
+                if (options.FindOrphans)
+                {
+                    Console.WriteLine($"\nSearching the {options.InputDirectory} directory and its subdirectories for orphaned topics.\n");
+
+                    List<FileInfo> tocFiles = GetTocFiles(options.InputDirectory);
+                    List<FileInfo> markdownFiles = GetMarkdownFiles(options.InputDirectory);
+
+                    ListFilesNotInToc(tocFiles, markdownFiles);
+                }
+                else if (options.FindMultiples)
+                {
+                    Console.WriteLine($"\nSearching the {options.InputDirectory} directory and its subdirectories for " +
+                        $"topics that appear more than once in one or more TOC.md files.\n");
+
+                    List<FileInfo> tocFiles = GetTocFiles(options.InputDirectory);
+                    List<FileInfo> markdownFiles = GetMarkdownFiles(options.InputDirectory);
+
+                    ListPopularFiles(tocFiles, markdownFiles);
+                }
+            }
+            else
+            {
+                Console.WriteLine(options.GetUsage());
             }
 
-            string directory = args[0];
-
-            List<FileInfo> tocFiles = GetTocFiles(directory);
-            List<FileInfo> markdownFiles = GetMarkdownFiles(directory);
-
-            ListFilesNotInToc(tocFiles, markdownFiles);
-
-
             // Uncomment for debugging to see console output.
+            //Console.WriteLine("\nPress any key to continue.");
             //Console.ReadLine();
+        }
+
+        /// <summary>
+        /// Finds topics that appear more than once, either in one TOC.md file, or multiple TOC.md files.
+        /// </summary>
+        private static void ListPopularFiles(List<FileInfo> tocFiles, List<FileInfo> markdownFiles)
+        {
+            throw new NotImplementedException();
         }
 
         /// <summary>
@@ -33,10 +59,13 @@ namespace NotInToc
         /// </summary>
         private static void ListFilesNotInToc(List<FileInfo> tocFiles, List<FileInfo> markdownFiles, bool ignoreFilesWithRedirectUrl = true)
         {
+            int count = 0;
+
             foreach (var markdownFile in markdownFiles)
             {
                 // If the file is in the Includes directory, ignore it
-                if (markdownFile.FullName.Contains("\\includes\\"))
+                // If the file is a TOC itself, ignore it
+                if (markdownFile.FullName.Contains("\\includes\\") || String.Compare(markdownFile.Name, "TOC.md") == 0)
                     continue;
 
                 if (!IsInToc(markdownFile, tocFiles))
@@ -60,15 +89,19 @@ namespace NotInToc
                         // If the file doesn't have a redirect_url tag, report it
                         if (!redirect)
                         {
-                            Console.WriteLine(String.Format("File '{0}' is not in any TOC file", markdownFile.FullName));
+                            count++;
+                            Console.WriteLine($"File '{markdownFile.FullName}' is not in any TOC file");
                         }
                     }
                     else
                     {
-                        Console.WriteLine(String.Format("File '{0}' is not in any TOC file", markdownFile.FullName));
+                        count++;
+                        Console.WriteLine($"File '{markdownFile.FullName}' is not in any TOC file");
                     }
                 }
             }
+
+            Console.WriteLine($"\n{count} total files not in a TOC.");
         }
 
         /// <summary>
@@ -93,7 +126,7 @@ namespace NotInToc
         /// <summary>
         /// Checks if the specified file PATH is referenced in a TOC.md file.
         /// </summary>
-        private static bool IsInToc(FileInfo markdownFile, List<FileInfo> tocFiles)
+        private static bool IsInToc(FileInfo markdownFile, List<FileInfo> tocFiles, bool outputSimilarities = false)
         {
             foreach (var tocFile in tocFiles)
             {
@@ -139,10 +172,13 @@ namespace NotInToc
                         }
                         else
                         {
-                            // We expect a lot of TOC.md names, so no need to spit out all similarities
-                            if (markdownFile.Name != "TOC.md" && markdownFile.Name != "index.md")
+                            if (outputSimilarities)
                             {
-                                Console.WriteLine(String.Format("File '{0}' has same file name as a file in {1}: '{2}'", markdownFile.FullName, tocFile.FullName, line));
+                                // We expect a lot of index.md names, so no need to spit out all similarities
+                                if (markdownFile.Name != "index.md")
+                                {
+                                    Console.WriteLine($"File '{markdownFile.FullName}' has same file name as a file in {tocFile.FullName}: '{line}'");
+                                }
                             }
                         }
                     }
