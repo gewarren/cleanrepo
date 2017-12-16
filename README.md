@@ -2,16 +2,39 @@
 
 This tool helps you find TOC-related topic issues.
 
-## Current functionality
+## Usage
 
-The not-in-toc.exe utility accepts a single input, that is a path to a Windows directory. The utility finds all TOC.md files recursively, starting either in the specified directory, if it contains a docfx.json file, or in the first parent directory that contains a docfx.json file. For each Markdown (\*.md) file in the specified directory and all subdirectories, the utility looks for a matching entry in any of the TOC.md files. The full path to the file is compared. The utility ignores \*.md files in directories named *Includes*. It also ignores files that have a *redirect_url* metadata tag. The utility writes all the files that weren't found in a TOC.md file to the console.
+  -d, --directory           Required. Directory to search for .md files.
 
-## Future functionality
+  -r, --recursive           (Default: False) Search directory and all
+                            subdirectories.
 
-- Show topics that appear in more than 1 TOC file.
+  -o, --orphans             Use this option to find orphaned topics.
+
+  -m, --multiples           Use this option to find topics that appear more
+                            than once in one or multiple TOC.md file.
+
+  -i, --ignore_redirects    (Default: True) Ignore .md files that have a
+                            redirect_url tag when looking for orphans.
+
+  --help                    Display this help screen.
+
+## Usage examples
+
+Search for orphaned topics non-recursively:
+NotInToc.exe -o -d c:\Users\gewarren\visualstudio-docs-pr\docs\ide
+
+Search for orphaned topics recursively, ignoring topics that have a redirect_url tag:
+NotInToc.exe -o -r -i false -d c:\Users\gewarren\visualstudio-docs-pr\docs\ide
+
+Search for topics that appear more than once in one or more TOC files, recursively:
+NotInToc.exe -m -r -d c:\Users\gewarren\visualstudio-docs-pr\docs\extensibility
+
+## Future functionality ideas
+
 - Show topics that appear multiple times in the same TOC.
+- Given a file name, show the TOC files it is referenced in (although this type of search can easily be done in VS Code, with a search scope of TOC.md files).
 - Group different types of output, e.g. files not in a TOC, then files with same name but different path in TOC.
-- Given a file name, show the TOC file(s) it is referenced in.
 - Show image files that aren't linked to anywhere.
 - Show include files that aren't linked to anywhere.
 - Show files in TOCs that have redirect_urls. (Note: should this handle central redirect files too?)
