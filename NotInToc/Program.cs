@@ -2,47 +2,61 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
+using System.Text.RegularExpressions;
 
 namespace NotInToc
 {
     class Program
     {
+        static StringBuilder SimilarFiles = new StringBuilder();
+        static StringBuilder ImagesNotInDictionary = new StringBuilder("\nThe following referenced images were not found in our dictionary. " +
+            "This can happen if the image is in a parent directory of the input directory:\n");
+
         static void Main(string[] args)
         {
             // Command line options
             var options = new Options();
-
             bool parsedArgs = CommandLine.Parser.Default.ParseArguments(args, options);
 
             if (parsedArgs)
             {
+                // Verify that the input directory exists.
+                if (!Directory.Exists(options.InputDirectory))
+                {
+                    Console.WriteLine($"\nDirectory {options.InputDirectory} does not exist.");
+                    return;
+                }
+
                 // Find orphaned topics
                 if (options.FindOrphanedTopics)
                 {
-                    Console.WriteLine($"\nSearching the {options.InputDirectory} directory and its subdirectories for orphaned topics.\n");
+                    Console.WriteLine($"\nSearching the {options.InputDirectory} directory and its subdirectories for orphaned topics.");
 
-                    List<FileInfo> tocFiles = GetTocFiles(options.InputDirectory, options.SearchRecursively);
+                    List<FileInfo> tocFiles = GetTocFiles(options.InputDirectory);
                     List<FileInfo> markdownFiles = GetMarkdownFiles(options.InputDirectory, options.SearchRecursively);
 
-                    ListOrphanedTopics(tocFiles, markdownFiles, options.IgnoreRedirects);
+                    ListOrphanedTopics(tocFiles, markdownFiles, options.IgnoreRedirects, options.Verbose);
                 }
+                // Find topics referenced multiple times
                 else if (options.FindMultiples)
                 {
                     Console.WriteLine($"\nSearching the {options.InputDirectory} directory and its subdirectories for " +
-                        $"topics that appear more than once in one or more TOC.md files.\n");
+                        $"topics that appear more than once in one or more TOC.md files.");
 
-                    List<FileInfo> tocFiles = GetTocFiles(options.InputDirectory, options.SearchRecursively);
+                    List<FileInfo> tocFiles = GetTocFiles(options.InputDirectory);
                     List<FileInfo> markdownFiles = GetMarkdownFiles(options.InputDirectory, options.SearchRecursively);
 
                     ListPopularFiles(tocFiles, markdownFiles);
                 }
+                // Find orphaned images
                 else if (options.FindOrphanedImages)
                 {
-                    Console.WriteLine($"\nSearching the {options.InputDirectory} directory and its subdirectories for orphaned images.\n");
+                    Console.WriteLine($"\nSearching the {options.InputDirectory} directory and its subdirectories for orphaned images.");
 
                     Dictionary<string, int> imageFiles = GetMediaFiles(options.InputDirectory, options.SearchRecursively);
 
-                    ListOrphanedImages(options.InputDirectory, imageFiles, options.SearchRecursively);
+                    ListOrphanedImages(options.InputDirectory, imageFiles, options.Verbose);
                 }
             }
 
@@ -51,48 +65,97 @@ namespace NotInToc
             //Console.ReadLine();
         }
 
-        private static void ListOrphanedImages(string inputDirectory, Dictionary<string, int> imageFiles, bool searchRecursively)
+        /// <summary>
+        /// Looks at all files in a directory named "media" in the specified directory or a subdirectory thereof.
+        /// Also looks at all files in subdirectories of directories named "media". If any of those files are not
+        /// referenced from a markdown (.md) file anywhere in the directory structure, including up the directory 
+        /// until the docfx.json file is found, the file path of those files is written to the console.
+        /// </summary>
+        private static void ListOrphanedImages(string inputDirectory, Dictionary<string, int> imageFiles, bool verboseOutput)
         {
             DirectoryInfo dir = new DirectoryInfo(inputDirectory);
-            SearchOption searchOption = searchRecursively ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
 
-            foreach (var markdownFile in dir.EnumerateFiles("*.md", searchOption))
+            foreach (var markdownFile in dir.EnumerateFiles("*.md", SearchOption.AllDirectories))
             {
                 foreach (string line in File.ReadAllLines(markdownFile.FullName))
                 {
-                    // Image references start with "!["
-                    if (line.Trim().StartsWith("!["))
+                    // Match ![]() image references
+
+                    // Matches the pattern ![]() with anything except a newline character
+                    // inside the square brackets or parentheses.
+                    string pattern = @"\!\[(.*?)\]\((.*?)\)";
+
+                    // There could be more than one image reference on the line, hence the foreach loop.
+                    foreach (Match match in Regex.Matches(line, pattern))
                     {
-                        int startOfPath = line.IndexOf("](") + 2;
+                        string relativePath = GetFilePath(match.Groups[0].Value);
 
-                        // Example image reference:
-                        //  ![Auto hide](../ide/media/vs2015_auto_hide.png "vs2017_auto_hide") 
-
-                        // Construct the full path to the referenced image file
-                        string fullPath = ConstructFullPath(markdownFile, line, startOfPath);
-
-                        // If there's a nickname on the end, remove it
-                        if (fullPath.EndsWith("\""))
+                        if (relativePath != null)
                         {
-                            int nicknameLength = fullPath.LastIndexOf('"') - fullPath.IndexOf('"');
+                            // Construct the full path to the referenced image file
+                            string fullPath = Path.Combine(markdownFile.DirectoryName, relativePath);
 
-                            // Trim nickname + 3 characters from the end
-                            fullPath = fullPath.Substring(0, fullPath.Length - (nicknameLength + 2));
+                            // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
+                            fullPath = Path.GetFullPath(fullPath);
+
+                            if (fullPath != null)
+                            {
+                                // Increment the count for this image file in our dictionary
+                                try
+                                {
+                                    imageFiles[fullPath.ToLower()]++;
+                                }
+                                catch (KeyNotFoundException)
+                                {
+                                    ImagesNotInDictionary.AppendLine(fullPath);
+                                }
+                            }
                         }
+                    }
 
-                        // Increment the count for this image file in our dictionary
-                        imageFiles[fullPath.ToLower()]++;
+                    // Match "img src=" references
+                    if (line.Contains("<img src="))
+                    {
+                        string relativePath = GetFilePath(line);
+
+                        if (relativePath != null)
+                        {
+                            // Construct the full path to the referenced image file
+                            string fullPath = Path.Combine(markdownFile.DirectoryName, relativePath);
+
+                            // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
+                            fullPath = Path.GetFullPath(fullPath);
+
+                            if (fullPath != null)
+                            {
+                                // Increment the count for this image file in our dictionary
+                                try
+                                {
+                                    imageFiles[fullPath.ToLower()]++;
+                                }
+                                catch (KeyNotFoundException)
+                                {
+                                    ImagesNotInDictionary.AppendLine(fullPath);
+                                }
+                            }
+                        }
                     }
                 }
             }
 
-            // Now print out the image files with 0 references.
+            // Now print out the image files with zero references.
+            Console.WriteLine("\nThe following media files are not referenced from any .md file:\n");
             foreach (var image in imageFiles)
             {
                 if (image.Value == 0)
                 {
-                    Console.WriteLine($"Image '{image.Key}' is not referenced in any markdown files.");
+                    Console.WriteLine(image.Key);
                 }
+            }
+
+            if (verboseOutput)
+            {
+                Console.WriteLine(ImagesNotInDictionary.ToString());
             }
         }
 
@@ -133,9 +196,11 @@ namespace NotInToc
         /// Lists the files that aren't in a TOC.
         /// Optionally, only list files that don't have a redirect_url metadata tag.
         /// </summary>
-        private static void ListOrphanedTopics(List<FileInfo> tocFiles, List<FileInfo> markdownFiles, bool ignoreFilesWithRedirectUrl)
+        private static void ListOrphanedTopics(List<FileInfo> tocFiles, List<FileInfo> markdownFiles, bool ignoreFilesWithRedirectUrl, bool verboseOutput)
         {
             int countNotFound = 0;
+
+            StringBuilder sb = new StringBuilder("\nTopics not in any TOC file:\n");
 
             foreach (var markdownFile in markdownFiles)
             {
@@ -170,18 +235,24 @@ namespace NotInToc
                     if (!redirect)
                     {
                         countNotFound++;
-                        Console.WriteLine($"File '{markdownFile.FullName}' is not in any TOC file");
+                        sb.AppendLine(markdownFile.FullName);
                     }
                 }
             }
 
-            Console.WriteLine($"\nFound {countNotFound} total .md files that are not in a TOC.");
+            sb.AppendLine($"\nFound {countNotFound} total .md files that are not referenced in a TOC.\n");
+            Console.Write(sb.ToString());
+
+            if (verboseOutput)
+            {
+                Console.WriteLine("Similar file names:\n" + SimilarFiles.ToString());
+            }
         }
 
         /// <summary>
-        /// Checks if the specified file PATH is referenced in a TOC.md file.
+        /// Checks if the specified file path is referenced in a TOC.md file.
         /// </summary>
-        private static bool IsInToc(FileInfo markdownFile, FileInfo tocFile, bool outputSimilarities = false)
+        private static bool IsInToc(FileInfo markdownFile, FileInfo tocFile)
         {
             // Read all the .md files listed in the TOC file
             foreach (string line in File.ReadAllLines(tocFile.FullName))
@@ -192,85 +263,104 @@ namespace NotInToc
                     continue;
                 }
 
-                int startOfPath;
-                string fileNameInToc;
-
-                GetFileName(line, out startOfPath, out fileNameInToc);
-
                 // If the file name is somewhere in the line of text...
-                if (String.Compare(markdownFile.Name, fileNameInToc) == 0)
+                if (line.Contains("(" + markdownFile.Name) || line.Contains("/" + markdownFile.Name))
                 {
                     // Now verify the file path to ensure we're talking about the same file
-                    string fullPath = ConstructFullPath(tocFile, line, startOfPath);
+                    string relativePath = GetFilePath(line);
+                    if (relativePath != null)
+                    {
+                        // Construct the full path to the referenced markdown file
+                        string fullPath = Path.Combine(tocFile.DirectoryName, relativePath);
 
-                    // See if our constructed path matches the actual file we think it is
-                    if (String.Compare(fullPath, markdownFile.FullName) == 0)
-                    {
-                        return true;
-                    }
-                    else
-                    {
-                        if (outputSimilarities)
+                        // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
+                        fullPath = Path.GetFullPath(fullPath);
+                        if (fullPath != null)
                         {
-                            // We expect a lot of index.md names, so no need to spit out all similarities
-                            if (markdownFile.Name != "index.md")
+                            // See if our constructed path matches the actual file we think it is
+                            if (String.Compare(fullPath, markdownFile.FullName) == 0)
                             {
-                                Console.WriteLine($"File '{markdownFile.FullName}' has same file name as a file in {tocFile.FullName}: '{line}'");
+                                return true;
+                            }
+                            else
+                            {
+                                // We expect a lot of index.md names, so no need to spit out all similarities
+                                if (markdownFile.Name != "index.md")
+                                {
+                                    SimilarFiles.AppendLine($"File '{markdownFile.FullName}' has same file name as a file in {tocFile.FullName}: '{line}'");
+                                }
                             }
                         }
                     }
                 }
             }
 
-            // We did not find this file in any TOC file.
+            // We did not find this markdown file in any TOC file.
             return false;
         }
 
-        private static string ConstructFullPath(FileInfo referencingFile, string line, int startOfPath)
+        /// <summary>
+        /// Returns the file path from the specified text that contains 
+        /// either the pattern "[text](file path)" or "img src=".
+        /// Returns null if the file is in a different repo or is an http URL.
+        /// </summary>
+        private static string GetFilePath(string text)
         {
-            // TODO: Handle paths that have text after them, for example:
+            // Example image references:
+            // ![Auto hide](../ide/media/vs2015_auto_hide.png)
+            // ![Unit Test Explorer showing Run All button](../test/media/unittestexplorer-beta-.png "UnitTestExplorer(beta)")
             // ![link to video](../data-tools/media/playvideo.gif "PlayVideo")For a video version of this topic, see...
+            // <img src="../data-tools/media/logo_azure-datalake.svg" alt=""
+            // The Light Bulb icon ![Small Light Bulb Icon](media/vs2015_lightbulbsmall.png "VS2017_LightBulbSmall"),
 
-            string relativePath = line.Substring(startOfPath, line.LastIndexOf(')') - startOfPath);
+            // but not:
+            // <![CDATA[
 
-            // Handle paths that start with "./"
-            if (relativePath.StartsWith("./"))
+            // Example .md file reference in a TOC:
+            // ### [Managing External Tools](ide/managing-external-tools.md)
+
+            if (text.Contains("]("))
             {
-                relativePath = relativePath.Substring(2);
+                text = text.Substring(text.IndexOf("](") + 2);
+
+                if (text.StartsWith("/") || text.StartsWith("http"))
+                {
+                    // The file is in a different repo, so ignore it.
+                    return null;
+                }
+
+                // Look for the closing parenthesis.
+                string relativePath = text.Substring(0, text.IndexOf(')'));
+
+                // If there is a whitespace character in the string, truncate it there.
+                int index = relativePath.IndexOf(' ');
+                if (index > 0)
+                {
+                    relativePath = relativePath.Substring(0, index);
+                }
+
+                return relativePath;
             }
-
-            relativePath = relativePath.Replace('/', '\\');
-
-            DirectoryInfo rootPath = referencingFile.Directory;
-            while (relativePath.StartsWith(".."))
+            else if (text.Contains("img src="))
             {
-                // Go up one level in the root path.
-                rootPath = rootPath.Parent;
+                text = text.Substring(text.IndexOf("img src=") + 9);
 
-                // Remove "..\" from relative path.
-                relativePath = relativePath.Substring(3);
+                if (text.StartsWith("/") || text.StartsWith("http"))
+                {
+                    // The file is in a different repo, so ignore it.
+                    return null;
+                }
+
+                return text.Substring(0, text.IndexOf('"'));
             }
-
-            string fullPath = String.Concat(rootPath.FullName, "\\", relativePath);
-            return fullPath;
-        }
-
-        private static void GetFileName(string line, out int startOfPath, out string fileNameInReferencingFile)
-        {
-            startOfPath = line.IndexOf("](") + 2;
-            int startOfFileName = line.LastIndexOf('/') + 1;
-            if (startOfFileName == 0)
+            else
             {
-                // There's no '/' in the path to the file
-                startOfFileName = startOfPath;
+                throw new ArgumentException($"Argument 'line' does not contain the pattern '](' or 'img src='.");
             }
-
-            fileNameInReferencingFile = line.Substring(startOfFileName, line.LastIndexOf(')') - startOfFileName);
         }
 
         /// <summary>
-        /// Gets all *.md files recursively, starting in the
-        /// specified directory.
+        /// Gets all *.md files recursively, starting in the specified directory.
         /// </summary>
         private static List<FileInfo> GetMarkdownFiles(string directoryPath, bool searchRecursively)
         {
@@ -281,25 +371,33 @@ namespace NotInToc
         }
 
         /// <summary>
-        /// Returns a dictionary of all files in all directories that contains the word "media".
+        /// Returns a dictionary of all files that occur in a directory that contains the word "media".
+        /// The search includes the specified directory and all its subdirectories.
         /// </summary>
         private static Dictionary<string, int> GetMediaFiles(string inputDirectory, bool searchRecursively)
         {
             DirectoryInfo dir = new DirectoryInfo(inputDirectory);
 
-            // We need to search up the directory tree for image files, because 
-            // markdown files can reference image files higher up in the tree.
-            dir = GetDocFxDirectory(dir);
-
             SearchOption searchOption = searchRecursively ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
 
             Dictionary<string, int> mediaFiles = new Dictionary<string, int>();
 
-            foreach (var directory in dir.EnumerateDirectories("media", searchOption))
+            var mediaDirectories = dir.EnumerateDirectories("media", searchOption);
+
+            foreach (var directory in mediaDirectories)
             {
                 foreach (var file in directory.EnumerateFiles())
                 {
                     mediaFiles.Add(file.FullName.ToLower(), 0);
+                }
+
+                // Now search for subdirectories of the 'media' directory
+                foreach (var subdirectory in directory.EnumerateDirectories("*", searchOption))
+                {
+                    foreach (var file in subdirectory.EnumerateFiles())
+                    {
+                        mediaFiles.Add(file.FullName.ToLower(), 0);
+                    }
                 }
             }
 
@@ -313,31 +411,44 @@ namespace NotInToc
         /// a "docfx.json" file. Then it starts the recursive search
         /// for TOC.md files from that directory.
         /// </summary>
-        private static List<FileInfo> GetTocFiles(string directoryPath, bool searchRecursively)
+        private static List<FileInfo> GetTocFiles(string directoryPath)
         {
             DirectoryInfo dir = new DirectoryInfo(directoryPath);
 
             // Look further up the path until we find docfx.json
             dir = GetDocFxDirectory(dir);
 
-            SearchOption searchOption = searchRecursively ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
-
-            return dir.EnumerateFiles("TOC.md", searchOption).ToList();
+            return dir.EnumerateFiles("TOC.md", SearchOption.AllDirectories).ToList();
         }
 
+        /// <summary>
+        /// Returns the specified directory if it contains a file named "docfx.json".
+        /// Otherwise returns the nearest parent directory that contains a file named "docfx.json".
+        /// </summary>
         private static DirectoryInfo GetDocFxDirectory(DirectoryInfo dir)
         {
-            while (dir.GetFiles("docfx.json", SearchOption.TopDirectoryOnly).Length == 0)
+            try
             {
-                dir = dir.Parent;
+                while (dir.GetFiles("docfx.json", SearchOption.TopDirectoryOnly).Length == 0)
+                {
+                    dir = dir.Parent;
 
-                if (dir == dir.Root)
-                    throw new Exception("Could not find docfx.json file in directory structure.");
+                    if (dir == dir.Root)
+                        throw new Exception("Could not find docfx.json file in directory structure.");
+                }
+            }
+            catch (DirectoryNotFoundException)
+            {
+                Console.WriteLine($"Could not find directory {dir.FullName}");
+                throw;
             }
 
             return dir;
         }
 
+        /// <summary>
+        /// Returns true if the specified file contains a "redirect_url" metadata tag.
+        /// </summary>
         private static bool FileContainsRedirectUrl(FileInfo markdownFile)
         {
             foreach (var line in File.ReadAllLines(markdownFile.FullName))
