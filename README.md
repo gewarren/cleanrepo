@@ -39,7 +39,8 @@ NotInToc.exe -m -d c:\Users\gewarren\visualstudio-docs-pr\docs\extensibility
 
 - Given a file name, show the TOC files it is referenced in (although this type of search can easily be done in e.g. VS Code,
   with a search scope of TOC.md files).
-- Show include files that aren't linked to anywhere.
+- Show orphaned include files.
+- Show orphaned code snippets.
 - Show files in TOCs that have redirect_urls. (Note: should this handle central redirect files too?)
 - Do a friendly diff of two TOC files: number of topics in each, topics in one file but not the other,
   sub-node comparisons, (nodes that have a link in one file but not the other)
