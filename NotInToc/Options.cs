@@ -6,7 +6,7 @@ namespace NotInToc
     // Define a class to receive parsed values
     class Options
     {
-        [Option('d', "directory", Required = true, HelpText = "Directory to start search for markdown files or media directories.")]
+        [Option('d', "directory", Required = true, HelpText = "Directory to start search for markdown files, or the media directory to search in for orphaned images.")]
         public string InputDirectory { get; set; }
 
         [Option('r', "recursive", DefaultValue = true, Required = false, HelpText = "Search directory and all subdirectories.")]
@@ -26,6 +26,9 @@ namespace NotInToc
 
         [Option('v', "verbose", DefaultValue = false, Required = false, HelpText = "Output verbose results.")]
         public bool Verbose { get; set; }
+
+        [Option('g', "delete", DefaultValue = false, Required = false, HelpText = "Set to true to delete orphaned image files.")]
+        public bool Delete { get; set; }
 
         [ParserState]
         public IParserState LastParserState { get; set; }

@@ -9,6 +9,11 @@ namespace NotInToc
 {
     class Program
     {
+        public Program(string arg1)
+        {
+            throw new InvalidOperationException(nameof(arg1));
+        }
+
         static StringBuilder SimilarFiles = new StringBuilder();
         static StringBuilder ImagesNotInDictionary = new StringBuilder("\nThe following referenced images were not found in our dictionary. " +
             "This can happen if the image is in a parent directory of the input directory:\n");
@@ -52,11 +57,18 @@ namespace NotInToc
                 // Find orphaned images
                 else if (options.FindOrphanedImages)
                 {
-                    Console.WriteLine($"\nSearching the {options.InputDirectory} directory and its subdirectories for orphaned images.");
+                    Console.WriteLine($"\nSearching the {options.InputDirectory} directory for orphaned images.");
 
                     Dictionary<string, int> imageFiles = GetMediaFiles(options.InputDirectory, options.SearchRecursively);
+                    //Dictionary<FileInfo, int> imageFiles = GetMediaFiles(options.InputDirectory, options.SearchRecursively);
 
-                    ListOrphanedImages(options.InputDirectory, imageFiles, options.Verbose);
+                    if (imageFiles.Count == 0)
+                    {
+                        Console.WriteLine("\nNo image files were found!");
+                        return;
+                    }
+
+                    ListOrphanedImages(options.InputDirectory, imageFiles, options.Verbose, options.Delete);
                 }
             }
 
@@ -66,16 +78,16 @@ namespace NotInToc
         }
 
         /// <summary>
-        /// Looks at all files in a directory named "media" in the specified directory or a subdirectory thereof.
-        /// Also looks at all files in subdirectories of directories named "media". If any of those files are not
+        /// If any of the input image files are not
         /// referenced from a markdown (.md) file anywhere in the directory structure, including up the directory 
         /// until the docfx.json file is found, the file path of those files is written to the console.
         /// </summary>
-        private static void ListOrphanedImages(string inputDirectory, Dictionary<string, int> imageFiles, bool verboseOutput)
+        private static void ListOrphanedImages(string inputDirectory, Dictionary<string, int> imageFiles, bool verboseOutput, bool deleteOrphanedImages)
         {
-            DirectoryInfo dir = new DirectoryInfo(inputDirectory);
+            var files = GetAllMarkdownFiles(inputDirectory);
 
-            foreach (var markdownFile in dir.EnumerateFiles("*.md", SearchOption.AllDirectories))
+            // Gather up all the image references and increment the count for that image in the Dictionary.
+            foreach (var markdownFile in files)
             {
                 foreach (string line in File.ReadAllLines(markdownFile.FullName))
                 {
@@ -143,19 +155,35 @@ namespace NotInToc
                 }
             }
 
-            // Now print out the image files with zero references.
+            // Print out the image files with zero references.
             Console.WriteLine("\nThe following media files are not referenced from any .md file:\n");
             foreach (var image in imageFiles)
             {
                 if (image.Value == 0)
                 {
-                    Console.WriteLine(image.Key);
+                    // Trim the image path to just the file name.
+                    Console.WriteLine(Path.GetFileName(image.Key));
                 }
             }
 
             if (verboseOutput)
             {
                 Console.WriteLine(ImagesNotInDictionary.ToString());
+            }
+
+            if (deleteOrphanedImages)
+            {
+                Console.WriteLine("\nDeleting orphaned files...");
+
+                // Delete orphaned image files
+                foreach (var image in imageFiles)
+                {
+                    if (image.Value == 0)
+                    {
+                        Console.WriteLine($"Deleting {image.Key}.");
+                        File.Delete(image.Key);
+                    }
+                }
             }
         }
 
@@ -371,33 +399,42 @@ namespace NotInToc
         }
 
         /// <summary>
-        /// Returns a dictionary of all files that occur in a directory that contains the word "media".
+        /// Gets all *.md files recursively, starting in the ancestor directory that contains docfx.json.
+        /// </summary>
+        private static List<FileInfo> GetAllMarkdownFiles(string directoryPath)
+        {
+            DirectoryInfo dir = new DirectoryInfo(directoryPath);
+
+            // Look further up the path until we find docfx.json
+            dir = GetDocFxDirectory(dir);
+
+            return dir.EnumerateFiles("*.md", SearchOption.AllDirectories).ToList();
+        }
+
+        /// <summary>
+        /// Returns a dictionary of all files in the directory.
         /// The search includes the specified directory and all its subdirectories.
         /// </summary>
-        private static Dictionary<string, int> GetMediaFiles(string inputDirectory, bool searchRecursively)
+        private static Dictionary<string, int> GetMediaFiles(string mediaDirectory, bool searchRecursively = true)
         {
-            DirectoryInfo dir = new DirectoryInfo(inputDirectory);
+            DirectoryInfo dir = new DirectoryInfo(mediaDirectory);
 
             SearchOption searchOption = searchRecursively ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
 
             Dictionary<string, int> mediaFiles = new Dictionary<string, int>();
 
-            var mediaDirectories = dir.EnumerateDirectories("media", searchOption);
+            foreach (var file in dir.EnumerateFiles())
+            {
+                mediaFiles.Add(file.FullName.ToLower(), 0);
+            }
+
+            var mediaDirectories = dir.EnumerateDirectories("*", searchOption);
 
             foreach (var directory in mediaDirectories)
             {
                 foreach (var file in directory.EnumerateFiles())
                 {
                     mediaFiles.Add(file.FullName.ToLower(), 0);
-                }
-
-                // Now search for subdirectories of the 'media' directory
-                foreach (var subdirectory in directory.EnumerateDirectories("*", searchOption))
-                {
-                    foreach (var file in subdirectory.EnumerateFiles())
-                    {
-                        mediaFiles.Add(file.FullName.ToLower(), 0);
-                    }
                 }
             }
 
