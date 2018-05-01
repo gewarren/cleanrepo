@@ -5,7 +5,8 @@ This tool helps you find TOC-related topic issues.
 ## Usage
 
   -d, --directory           Required. Directory to start search for markdown
-                            files or media directories.
+                            files, or the media directory to search in for
+                            orphaned images.
 
   -r, --recursive           (Default: True) Search directory and all
                             subdirectories.
@@ -22,7 +23,10 @@ This tool helps you find TOC-related topic issues.
 
   -v, --verbose             (Default: False) Output verbose results.
 
-  --help                    Display the help screen.
+  -g, --delete              (Default: False) Set to true to delete orphaned
+                            image files.
+
+  --help                    Display this help screen.
 
 ## Usage examples
 
