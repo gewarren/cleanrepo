@@ -152,6 +152,10 @@ namespace NotInToc
                             }
                         }
                     }
+
+                    // TODO: Also match images that are referenced as links, i.e. where the image isn't displayed.
+                    // Like in the following example:
+                    // Copy the image file from the sample code, or get it [here](https://github.com/dotnet/docs/blob/master/docs/framework/wpf/getting-started/media/watermark.png)
                 }
             }
 
