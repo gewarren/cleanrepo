@@ -60,7 +60,6 @@ namespace NotInToc
                     Console.WriteLine($"\nSearching the {options.InputDirectory} directory for orphaned images.");
 
                     Dictionary<string, int> imageFiles = GetMediaFiles(options.InputDirectory, options.SearchRecursively);
-                    //Dictionary<FileInfo, int> imageFiles = GetMediaFiles(options.InputDirectory, options.SearchRecursively);
 
                     if (imageFiles.Count == 0)
                     {
@@ -91,14 +90,17 @@ namespace NotInToc
             {
                 foreach (string line in File.ReadAllLines(markdownFile.FullName))
                 {
-                    // Match ![]() image references
+                    string mediaDirectoryName = Path.GetFileName(inputDirectory);
 
-                    // Matches the pattern ![]() with anything except a newline character
-                    // inside the square brackets or parentheses.
-                    string pattern = @"\!\[(.*?)\]\((.*?)\)";
+                    // Match []() image references where the path to the image file includes the name of the input media directory.
+                    // This includes links that don't start with ! for images that are referenced as a hyperlink
+                    // instead of an image to display.
+
+                    // RegEx pattern to match
+                    string imageLinkPattern = @"\]\(([^\)]*?)" + mediaDirectoryName + @"\/(.*?)\)";
 
                     // There could be more than one image reference on the line, hence the foreach loop.
-                    foreach (Match match in Regex.Matches(line, pattern))
+                    foreach (Match match in Regex.Matches(line, imageLinkPattern))
                     {
                         string relativePath = GetFilePath(match.Groups[0].Value);
 
@@ -152,10 +154,6 @@ namespace NotInToc
                             }
                         }
                     }
-
-                    // TODO: Also match images that are referenced as links, i.e. where the image isn't displayed.
-                    // Like in the following example:
-                    // Copy the image file from the sample code, or get it [here](https://github.com/dotnet/docs/blob/master/docs/framework/wpf/getting-started/media/watermark.png)
                 }
             }
 
