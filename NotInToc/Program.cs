@@ -7,6 +7,8 @@ using System.Text.RegularExpressions;
 
 namespace NotInToc
 {
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Globalization", "CA1304:Specify CultureInfo", Justification = "Annoying")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Globalization", "CA1307:Specify StringComparison", Justification = "Annoying")]
     class Program
     {
         public Program(string arg1)
@@ -57,7 +59,7 @@ namespace NotInToc
                 // Find orphaned images
                 else if (options.FindOrphanedImages)
                 {
-                    Console.WriteLine($"\nSearching the {options.InputDirectory} directory for orphaned images.");
+                    Console.WriteLine($"\nSearching the {options.InputDirectory} directory for orphaned images.\n");
 
                     Dictionary<string, int> imageFiles = GetMediaFiles(options.InputDirectory, options.SearchRecursively);
 
@@ -158,13 +160,12 @@ namespace NotInToc
             }
 
             // Print out the image files with zero references.
-            Console.WriteLine("\nThe following media files are not referenced from any .md file:\n");
+            Console.WriteLine("The following media files are not referenced from any .md file:\n");
             foreach (var image in imageFiles)
             {
                 if (image.Value == 0)
                 {
-                    // Trim the image path to just the file name.
-                    Console.WriteLine(Path.GetFileName(image.Key));
+                    Console.WriteLine(Path.GetFullPath(image.Key));
                 }
             }
 
@@ -175,7 +176,7 @@ namespace NotInToc
 
             if (deleteOrphanedImages)
             {
-                Console.WriteLine("\nDeleting orphaned files...");
+                Console.WriteLine("\nDeleting orphaned files...\n");
 
                 // Delete orphaned image files
                 foreach (var image in imageFiles)
@@ -381,7 +382,28 @@ namespace NotInToc
                     return null;
                 }
 
-                return text.Substring(0, text.IndexOf('"'));
+                // Check that the path is valid, i.e. it starts with a letter or a '.'.
+                // RegEx pattern to match
+                string imageLinkPattern = @"^(\w|\.).*";
+
+                if (Regex.Matches(text, imageLinkPattern).Count > 0)
+                {
+                    try
+                    {
+                        return text.Substring(0, text.IndexOf('"'));
+                    }
+                    catch (ArgumentException e)
+                    {
+                        Console.WriteLine($"Caught ArgumentException while extracting the image path from the following text: {text}\n");
+                        return null;
+                    }
+                }
+                else
+                {
+                    // Unrecognizable file path.
+                    Console.WriteLine($"Unrecognizable file path (ignoring this image link): {text}\n");
+                    return null;
+                }
             }
             else
             {
