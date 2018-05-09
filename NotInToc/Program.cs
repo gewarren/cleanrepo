@@ -104,7 +104,7 @@ namespace NotInToc
                     // There could be more than one image reference on the line, hence the foreach loop.
                     foreach (Match match in Regex.Matches(line, imageLinkPattern))
                     {
-                        string relativePath = GetFilePath(match.Groups[0].Value);
+                        string relativePath = GetFilePathFromLink(match.Groups[0].Value);
 
                         if (relativePath != null)
                         {
@@ -132,7 +132,7 @@ namespace NotInToc
                     // Match "img src=" references
                     if (line.Contains("<img src="))
                     {
-                        string relativePath = GetFilePath(line);
+                        string relativePath = GetFilePathFromLink(line);
 
                         if (relativePath != null)
                         {
@@ -238,7 +238,7 @@ namespace NotInToc
                 bool found = false;
 
                 // If the file is in the Includes directory, or the file is a TOC itself, ignore it
-                if (markdownFile.FullName.Contains("\\includes\\") || String.Compare(markdownFile.Name, "TOC.md") == 0)
+                if (markdownFile.FullName.Contains("\\includes\\") || String.Compare(markdownFile.Name, "TOC.md") == 0 || String.Compare(markdownFile.Name, "TOC.yml") == 0)
                     continue;
 
                 foreach (var tocFile in tocFiles)
@@ -281,45 +281,54 @@ namespace NotInToc
         }
 
         /// <summary>
-        /// Checks if the specified file path is referenced in a TOC.md file.
+        /// Checks if the specified file path is referenced in a TOC file.
         /// </summary>
         private static bool IsInToc(FileInfo markdownFile, FileInfo tocFile)
         {
             // Read all the .md files listed in the TOC file
             foreach (string line in File.ReadAllLines(tocFile.FullName))
             {
-                if (line.Contains("](") == false)
+                string relativePath = null;
+
+                if (line.Contains("](")) // TOC.md style link
                 {
-                    // line doesn't contain a file reference
-                    continue;
+                    // If the file name is somewhere in the line of text...
+                    if (line.Contains("(" + markdownFile.Name) || line.Contains("/" + markdownFile.Name))
+                    {
+                        // Now verify the file path to ensure we're talking about the same file
+                        relativePath = GetFilePathFromLink(line);
+                    }
+                }
+                else if (line.Contains("href:")) // TOC.yml style link
+                {
+                    // If the file name is somewhere in the line of text...
+                    if (line.Contains(markdownFile.Name))
+                    {
+                        // Now verify the file path to ensure we're talking about the same file
+                        relativePath = GetFilePathFromLink(line);
+                    }
                 }
 
-                // If the file name is somewhere in the line of text...
-                if (line.Contains("(" + markdownFile.Name) || line.Contains("/" + markdownFile.Name))
+                if (relativePath != null)
                 {
-                    // Now verify the file path to ensure we're talking about the same file
-                    string relativePath = GetFilePath(line);
-                    if (relativePath != null)
-                    {
-                        // Construct the full path to the referenced markdown file
-                        string fullPath = Path.Combine(tocFile.DirectoryName, relativePath);
+                    // Construct the full path to the referenced markdown file
+                    string fullPath = Path.Combine(tocFile.DirectoryName, relativePath);
 
-                        // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
-                        fullPath = Path.GetFullPath(fullPath);
-                        if (fullPath != null)
+                    // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
+                    fullPath = Path.GetFullPath(fullPath);
+                    if (fullPath != null)
+                    {
+                        // See if our constructed path matches the actual file we think it is
+                        if (String.Compare(fullPath, markdownFile.FullName) == 0)
                         {
-                            // See if our constructed path matches the actual file we think it is
-                            if (String.Compare(fullPath, markdownFile.FullName) == 0)
+                            return true;
+                        }
+                        else
+                        {
+                            // We expect a lot of index.md names, so no need to spit out all similarities
+                            if (markdownFile.Name != "index.md")
                             {
-                                return true;
-                            }
-                            else
-                            {
-                                // We expect a lot of index.md names, so no need to spit out all similarities
-                                if (markdownFile.Name != "index.md")
-                                {
-                                    SimilarFiles.AppendLine($"File '{markdownFile.FullName}' has same file name as a file in {tocFile.FullName}: '{line}'");
-                                }
+                                SimilarFiles.AppendLine($"File '{markdownFile.FullName}' has same file name as a file in {tocFile.FullName}: '{line}'");
                             }
                         }
                     }
@@ -335,7 +344,7 @@ namespace NotInToc
         /// either the pattern "[text](file path)" or "img src=".
         /// Returns null if the file is in a different repo or is an http URL.
         /// </summary>
-        private static string GetFilePath(string text)
+        private static string GetFilePathFromLink(string text)
         {
             // Example image references:
             // ![Auto hide](../ide/media/vs2015_auto_hide.png)
@@ -372,6 +381,11 @@ namespace NotInToc
 
                 return relativePath;
             }
+            else if (text.Contains("href:"))
+            {
+                // e.g. href: ../ide/quickstart-python.md
+                return text.Substring(text.IndexOf("href:") + 5).Trim();
+            }
             else if (text.Contains("img src="))
             {
                 text = text.Substring(text.IndexOf("img src=") + 9);
@@ -392,7 +406,7 @@ namespace NotInToc
                     {
                         return text.Substring(0, text.IndexOf('"'));
                     }
-                    catch (ArgumentException e)
+                    catch (ArgumentException)
                     {
                         Console.WriteLine($"Caught ArgumentException while extracting the image path from the following text: {text}\n");
                         return null;
@@ -407,7 +421,7 @@ namespace NotInToc
             }
             else
             {
-                throw new ArgumentException($"Argument 'line' does not contain the pattern '](' or 'img src='.");
+                throw new ArgumentException($"Argument 'line' does not contain an expected link pattern.");
             }
         }
 
@@ -466,11 +480,9 @@ namespace NotInToc
         }
 
         /// <summary>
-        /// Gets all TOC.md files recursively, starting in the
-        /// specified directory if it contains "docfx.json" file.
-        /// Otherwise it looks up the directory path until it finds 
-        /// a "docfx.json" file. Then it starts the recursive search
-        /// for TOC.md files from that directory.
+        /// Gets all TOC.* files recursively, starting in the specified directory if it contains "docfx.json" file.
+        /// Otherwise it looks up the directory path until it finds a "docfx.json" file. Then it starts the recursive search
+        /// for TOC.* files from that directory.
         /// </summary>
         private static List<FileInfo> GetTocFiles(string directoryPath)
         {
@@ -479,7 +491,7 @@ namespace NotInToc
             // Look further up the path until we find docfx.json
             dir = GetDocFxDirectory(dir);
 
-            return dir.EnumerateFiles("TOC.md", SearchOption.AllDirectories).ToList();
+            return dir.EnumerateFiles("TOC.*", SearchOption.AllDirectories).ToList();
         }
 
         /// <summary>
