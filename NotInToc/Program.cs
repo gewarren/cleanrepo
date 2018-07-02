@@ -96,6 +96,8 @@ namespace Contentment
                     // Check all links, including in toc.yml, to files in the redirects Dictionary.
                     // Output the files that contain links to redirected topics, as well as the bad links.
                     ListRedirectLinks(redirectedFiles, linkingFiles);
+
+                    Console.WriteLine("\nDONE");
                 }
 
                 // Uncomment for debugging to see console output.
