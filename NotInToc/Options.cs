@@ -1,7 +1,7 @@
 ﻿using CommandLine;
 using CommandLine.Text;
 
-namespace NotInToc
+namespace Contentment
 {
     // Define a class to receive parsed values
     class Options
@@ -29,6 +29,9 @@ namespace NotInToc
 
         [Option('g', "delete", DefaultValue = false, Required = false, HelpText = "Set to true to delete orphaned image files.")]
         public bool Delete { get; set; }
+
+        [Option('l', "redirects", DefaultValue = false, Required = false, HelpText = "")]
+        public bool FindRedirectedTopicLinks { get; set; }
 
         [ParserState]
         public IParserState LastParserState { get; set; }

@@ -11,7 +11,7 @@ Remarks:
 
 Upgrading from < 1.9.6.1 rc1:
 -----------------------------
-Now CommandLine.Parser is defined as:
+Now CommandLine.Parser is defiend as:
 interface CommandLine.Parser {
   bool ParseArguments(string[] args, object options);
   bool ParseArguments(string[] args, object options, Action<string, object> onVerbCommand);

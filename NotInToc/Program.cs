@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace NotInToc
+namespace Contentment
 {
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Globalization", "CA1304:Specify CultureInfo", Justification = "Annoying")]
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Globalization", "CA1307:Specify StringComparison", Justification = "Annoying")]
@@ -71,11 +71,88 @@ namespace NotInToc
 
                     ListOrphanedImages(options.InputDirectory, imageFiles, options.Verbose, options.Delete);
                 }
-            }
+                // Find links to topics in the central redirect file
+                else if (options.FindRedirectedTopicLinks)
+                {
+                    Console.WriteLine($"\nSearching the {options.InputDirectory} directory for links to redirected topics.\n");
 
-            // Uncomment for debugging to see console output.
-            //Console.WriteLine("\nPress any key to continue.");
-            //Console.ReadLine();
+                    // Find the .openpublishing.redirection.json file for the directory
+                    FileInfo redirectsFile = GetRedirectsFile(options.InputDirectory);
+
+                    if (redirectsFile == null)
+                    {
+                        Console.WriteLine($"Could not find redirects file for directory {options.InputDirectory}");
+                        return;
+                    }
+
+                    // Put all the redirected files in a list
+                    List<string> redirectedFiles = new List<string>();
+                    GetAllRedirectedFiles(redirectsFile, redirectedFiles);
+
+                    // Get all the markdown and YAML files.
+                    List<FileInfo> linkingFiles = GetMarkdownFiles(options.InputDirectory, options.SearchRecursively);
+                    linkingFiles.AddRange(GetYAMLFiles(options.InputDirectory, options.SearchRecursively));
+
+                    // Check all links, including in toc.yml, to files in the redirects Dictionary.
+                    // Output the files that contain links to redirected topics, as well as the bad links.
+                    ListRedirectLinks(redirectedFiles, linkingFiles);
+                }
+
+                // Uncomment for debugging to see console output.
+                //Console.WriteLine("\nPress any key to continue.");
+                //Console.ReadLine();
+            }
+        }
+
+        private static void ListRedirectLinks(List<string> redirectedFiles, List<FileInfo> linkingFiles)
+        {
+            foreach (string redirectedFile in redirectedFiles)
+            {
+                StringBuilder backlinks = new StringBuilder();
+
+                foreach (var linkingFile in linkingFiles)
+                {
+                    if (IsFileLinkedInFile(redirectedFile, linkingFile))
+                    {
+                        backlinks.AppendLine(linkingFile.FullName);
+                    }
+                }
+
+                if (backlinks.Length > 0)
+                {
+                    Console.WriteLine($"\nRedirected file {redirectedFile} is backlinked from the following files:\n");
+                    Console.Write(backlinks.ToString());
+                }
+            }
+        }
+
+        private static void GetAllRedirectedFiles(FileInfo redirectsFile, List<string> redirectedFiles)
+        {
+            foreach (string line in File.ReadAllLines(redirectsFile.FullName))
+            {
+                // Example line that we're interested in:
+                // "source_path": "docs/extensibility/shell/shell-isolated-or-integrated.md",
+
+                // RegEx pattern to match
+                string redirectPattern = @"""source_path"": ""(.*)""";
+
+                // There could be more than one image reference on the line, hence the foreach loop.
+                foreach (Match match in Regex.Matches(line, redirectPattern))
+                {
+                    string relativePath = GetFilePathFromSourcePath(match.Groups[0].Value);
+
+                    if (relativePath != null)
+                    {
+                        // Construct the full path to the referenced image file
+                        string fullPath = Path.Combine(redirectsFile.DirectoryName, relativePath);
+
+                        // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
+                        fullPath = Path.GetFullPath(fullPath);
+
+                        redirectedFiles.Add(fullPath);
+                    }
+                }
+            }
         }
 
         /// <summary>
@@ -206,7 +283,7 @@ namespace NotInToc
 
                 foreach (var tocFile in tocFiles)
                 {
-                    if (IsInToc(markdownFile, tocFile))
+                    if (IsFileLinkedInFile(markdownFile, tocFile))
                     {
                         topics[markdownFile.FullName]++;
                     }
@@ -243,7 +320,7 @@ namespace NotInToc
 
                 foreach (var tocFile in tocFiles)
                 {
-                    if (!IsInToc(markdownFile, tocFile))
+                    if (!IsFileLinkedInFile(markdownFile, tocFile))
                     {
                         continue;
                     }
@@ -281,19 +358,28 @@ namespace NotInToc
         }
 
         /// <summary>
-        /// Checks if the specified file path is referenced in a TOC file.
+        /// Checks if the specified file path is referenced in the specified file.
         /// </summary>
-        private static bool IsInToc(FileInfo markdownFile, FileInfo tocFile)
+        private static bool IsFileLinkedInFile(string linkedFile, FileInfo linkingFile)
+        {
+            FileInfo file = new FileInfo(linkedFile);
+            return IsFileLinkedInFile(file, linkingFile);
+        }
+
+        /// <summary>
+        /// Checks if the specified file path is referenced in the specified file.
+        /// </summary>
+        private static bool IsFileLinkedInFile(FileInfo linkedFile, FileInfo linkingFile)
         {
             // Read all the .md files listed in the TOC file
-            foreach (string line in File.ReadAllLines(tocFile.FullName))
+            foreach (string line in File.ReadAllLines(linkingFile.FullName))
             {
                 string relativePath = null;
 
                 if (line.Contains("](")) // TOC.md style link
                 {
                     // If the file name is somewhere in the line of text...
-                    if (line.Contains("(" + markdownFile.Name) || line.Contains("/" + markdownFile.Name))
+                    if (line.Contains("(" + linkedFile.Name) || line.Contains("/" + linkedFile.Name))
                     {
                         // Now verify the file path to ensure we're talking about the same file
                         relativePath = GetFilePathFromLink(line);
@@ -302,7 +388,7 @@ namespace NotInToc
                 else if (line.Contains("href:")) // TOC.yml style link
                 {
                     // If the file name is somewhere in the line of text...
-                    if (line.Contains(markdownFile.Name))
+                    if (line.Contains(linkedFile.Name))
                     {
                         // Now verify the file path to ensure we're talking about the same file
                         relativePath = GetFilePathFromLink(line);
@@ -312,31 +398,51 @@ namespace NotInToc
                 if (relativePath != null)
                 {
                     // Construct the full path to the referenced markdown file
-                    string fullPath = Path.Combine(tocFile.DirectoryName, relativePath);
+                    string fullPath = Path.Combine(linkingFile.DirectoryName, relativePath);
 
                     // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
                     fullPath = Path.GetFullPath(fullPath);
                     if (fullPath != null)
                     {
                         // See if our constructed path matches the actual file we think it is
-                        if (String.Compare(fullPath, markdownFile.FullName) == 0)
+                        if (String.Compare(fullPath, linkedFile.FullName) == 0)
                         {
                             return true;
                         }
                         else
                         {
                             // We expect a lot of index.md names, so no need to spit out all similarities
-                            if (markdownFile.Name != "index.md")
+                            if (linkedFile.Name != "index.md")
                             {
-                                SimilarFiles.AppendLine($"File '{markdownFile.FullName}' has same file name as a file in {tocFile.FullName}: '{line}'");
+                                SimilarFiles.AppendLine($"File '{linkedFile.FullName}' has same file name as a file in {linkingFile.FullName}: '{line}'");
                             }
                         }
                     }
                 }
             }
 
-            // We did not find this markdown file in any TOC file.
+            // We did not find this file linked in the specified file.
             return false;
+        }
+
+        private static string GetFilePathFromSourcePath(string text)
+        {
+            // "source_path": "docs/extensibility/shell/shell-isolated-or-integrated.md",
+
+            if (text.Contains("source_path"))
+            {
+                // Grab the text that starts after "source_path": "
+                text = text.Substring(16);
+
+                // Trim the final quotation mark and comma
+                text = text.TrimEnd('"', ',');
+
+                return text;
+            }
+            else
+            {
+                throw new ArgumentException($"Argument 'line' does not contain an expected redirect source path.");
+            }
         }
 
         /// <summary>
@@ -437,6 +543,17 @@ namespace NotInToc
         }
 
         /// <summary>
+        /// Gets all *.yml files recursively, starting in the specified directory.
+        /// </summary>
+        private static List<FileInfo> GetYAMLFiles(string directoryPath, bool searchRecursively)
+        {
+            DirectoryInfo dir = new DirectoryInfo(directoryPath);
+            SearchOption searchOption = searchRecursively ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
+
+            return dir.EnumerateFiles("*.yml", searchOption).ToList();
+        }
+
+        /// <summary>
         /// Gets all *.md files recursively, starting in the ancestor directory that contains docfx.json.
         /// </summary>
         private static List<FileInfo> GetAllMarkdownFiles(string directoryPath)
@@ -495,6 +612,33 @@ namespace NotInToc
         }
 
         /// <summary>
+        /// </summary>
+        private static FileInfo GetRedirectsFile(string inputDirectory)
+        {
+            DirectoryInfo dir = new DirectoryInfo(inputDirectory);
+
+            try
+            {
+                FileInfo[] files = dir.GetFiles(".openpublishing.redirection.json", SearchOption.TopDirectoryOnly);
+                while (dir.GetFiles(".openpublishing.redirection.json", SearchOption.TopDirectoryOnly).Length == 0)
+                {
+                    dir = dir.Parent;
+
+                    // Loop exit condition.
+                    if (dir == dir.Root)
+                        return null;
+                }
+
+                return dir.GetFiles(".openpublishing.redirection.json", SearchOption.TopDirectoryOnly)[0];
+            }
+            catch (DirectoryNotFoundException)
+            {
+                Console.WriteLine($"Could not find directory {dir.FullName}");
+                throw;
+            }
+        }
+
+        /// <summary>
         /// Returns the specified directory if it contains a file named "docfx.json".
         /// Otherwise returns the nearest parent directory that contains a file named "docfx.json".
         /// </summary>
@@ -507,7 +651,7 @@ namespace NotInToc
                     dir = dir.Parent;
 
                     if (dir == dir.Root)
-                        throw new Exception("Could not find docfx.json file in directory structure.");
+                        throw new Exception("Could not find docfx.json file in directory or parent.");
                 }
             }
             catch (DirectoryNotFoundException)
