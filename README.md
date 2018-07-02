@@ -26,18 +26,21 @@ This tool helps you find TOC-related topic issues.
   -g, --delete              (Default: False) Set to true to delete orphaned
                             image files.
 
+  -l, --redirects           Finds backlinks to redirected files in the
+                            specified directory.
+
   --help                    Display this help screen.
 
 ## Usage examples
 
 Search for orphaned topics recursively:
-NotInToc.exe -o -d c:\Users\gewarren\visualstudio-docs-pr\docs\ide
+Contentment.exe -o -d c:\Users\gewarren\visualstudio-docs-pr\docs\ide
 
 Search for orphaned topics non-recursively, ignoring topics that have a redirect_url tag:
-NotInToc.exe -o -r false -i false -d c:\Users\gewarren\visualstudio-docs-pr\docs\ide
+Contentment.exe -o -r false -i false -d c:\Users\gewarren\visualstudio-docs-pr\docs\ide
 
 Search recursively for topics that appear more than once in one or more TOC files:
-NotInToc.exe -m -d c:\Users\gewarren\visualstudio-docs-pr\docs\extensibility
+Contentment.exe -m -d c:\Users\gewarren\visualstudio-docs-pr\docs\extensibility
 
 ## Future functionality ideas
 
@@ -45,6 +48,5 @@ NotInToc.exe -m -d c:\Users\gewarren\visualstudio-docs-pr\docs\extensibility
   with a search scope of TOC.md files).
 - Show orphaned include files.
 - Show orphaned code snippets.
-- Show files in TOCs that have redirect_urls. (Note: should this handle central redirect files too?)
 - Do a friendly diff of two TOC files: number of topics in each, topics in one file but not the other,
   sub-node comparisons, (nodes that have a link in one file but not the other)
