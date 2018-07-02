@@ -30,7 +30,7 @@ namespace Contentment
         [Option('g', "delete", DefaultValue = false, Required = false, HelpText = "Set to true to delete orphaned image files.")]
         public bool Delete { get; set; }
 
-        [Option('l', "redirects", DefaultValue = false, Required = false, HelpText = "")]
+        [Option('l', "redirects", Required = false, HelpText = "Finds backlinks to redirected files in the specified directory.")]
         public bool FindRedirectedTopicLinks { get; set; }
 
         [ParserState]
