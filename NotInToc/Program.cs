@@ -478,7 +478,17 @@ namespace Contentment
                 }
 
                 // Look for the closing parenthesis.
-                string relativePath = text.Substring(0, text.IndexOf(')'));
+                string relativePath;
+                try
+                {
+                    relativePath = text.Substring(0, text.IndexOf(')'));
+                }
+                catch (ArgumentOutOfRangeException)
+                {
+                    // Image link is likely badly formatted.
+                    Console.WriteLine($"Caught ArgumentOutOfRangeException while extracting the image path from the following text: {text}\n");
+                    return null;
+                }
 
                 // If there is a whitespace character in the string, truncate it there.
                 int index = relativePath.IndexOf(' ');
