@@ -555,7 +555,7 @@ namespace Contentment
             DirectoryInfo dir = new DirectoryInfo(directoryPath);
             SearchOption searchOption = searchRecursively ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
 
-            return dir.EnumerateFiles("toc.yml", searchOption).ToList();
+            return dir.EnumerateFiles("*.yml", searchOption).ToList();
         }
 
         /// <summary>
