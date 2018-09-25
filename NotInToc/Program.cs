@@ -496,7 +496,10 @@ namespace Contentment
             }
             else if (text.Contains("img src="))
             {
-                text = text.Substring(text.IndexOf("img src=") + 9);
+                text = text.Substring(text.IndexOf("img src=") + 8);
+
+                // Remove opening quotation marks, if present.
+                text = text.TrimStart('"');
 
                 if (text.StartsWith("/") || text.StartsWith("http"))
                 {
@@ -552,7 +555,7 @@ namespace Contentment
             DirectoryInfo dir = new DirectoryInfo(directoryPath);
             SearchOption searchOption = searchRecursively ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
 
-            return dir.EnumerateFiles("*.yml", searchOption).ToList();
+            return dir.EnumerateFiles("toc.yml", searchOption).ToList();
         }
 
         /// <summary>
