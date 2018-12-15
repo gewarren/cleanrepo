@@ -43,7 +43,7 @@ namespace NotInToc
                     List<FileInfo> tocFiles = GetTocFiles(options.InputDirectory);
                     List<FileInfo> markdownFiles = GetMarkdownFiles(options.InputDirectory, options.SearchRecursively);
 
-                    ListOrphanedTopics(tocFiles, markdownFiles, options.IgnoreRedirects, options.Verbose);
+                    ListOrphanedTopics(tocFiles, markdownFiles, options.IgnoreRedirects, options.Verbose, options.Delete);
                 }
                 // Find topics referenced multiple times
                 else if (options.FindMultiples)
@@ -306,7 +306,7 @@ namespace NotInToc
         /// Lists the files that aren't in a TOC.
         /// Optionally, only list files that don't have a redirect_url metadata tag.
         /// </summary>
-        private static void ListOrphanedTopics(List<FileInfo> tocFiles, List<FileInfo> markdownFiles, bool ignoreFilesWithRedirectUrl, bool verboseOutput)
+        private static void ListOrphanedTopics(List<FileInfo> tocFiles, List<FileInfo> markdownFiles, bool ignoreFilesWithRedirectUrl, bool verboseOutput, bool deleteOrphanedTopics)
         {
             int countNotFound = 0;
 
@@ -346,6 +346,13 @@ namespace NotInToc
                     {
                         countNotFound++;
                         sb.AppendLine(markdownFile.FullName);
+
+                        // Delete the file if the option is set.
+                        if (deleteOrphanedTopics)
+                        {
+                            Console.WriteLine($"Deleting {markdownFile.FullName}.");
+                            File.Delete(markdownFile.FullName);
+                        }
                     }
                 }
             }
