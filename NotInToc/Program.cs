@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace Contentment
+namespace NotInToc
 {
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Globalization", "CA1304:Specify CultureInfo", Justification = "Annoying")]
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Globalization", "CA1307:Specify StringComparison", Justification = "Annoying")]
@@ -502,7 +502,16 @@ namespace Contentment
             else if (text.Contains("href:"))
             {
                 // e.g. href: ../ide/quickstart-python.md
-                return text.Substring(text.IndexOf("href:") + 5).Trim();
+                // e.g. href: debugger/getting-started-with-the-debugger.md?context=visualstudio/default&contextView=vs-2017
+                text = text.Substring(text.IndexOf("href:") + 5).Trim();
+
+                // Handle contextual TOC links and others that have a ? in them
+                if (text.IndexOf('?') >= 0)
+                {
+                    text = text.Substring(0, text.IndexOf('?'));
+                }
+
+                return text;
             }
             else if (text.Contains("img src="))
             {

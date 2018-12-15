@@ -1,7 +1,7 @@
 ﻿using CommandLine;
 using CommandLine.Text;
 
-namespace Contentment
+namespace NotInToc
 {
     // Define a class to receive parsed values
     class Options
