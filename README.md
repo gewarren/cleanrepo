@@ -28,22 +28,40 @@ This tool helps you find topics that aren't linked from a TOC file, orphaned .pn
 ## Usage examples
 
 Find orphaned topics recursively:
+
+```
 NotInToc.exe -o -d c:\repos\visualstudio-docs-pr\docs\ide
+```
 
 Find orphaned topics non-recursively:
+
+```
 NotInToc.exe -o -r false -d c:\repos\visualstudio-docs-pr\docs\ide
+```
 
 Find orphaned .png files (recursive):
+
+```
 NotInToc.exe -p -d c:\repos\visualstudio-docs-pr\docs\ide\media
+```
 
 Find and delete orphaned INCLUDE files (recursive):
+
+```
 NotInToc.exe -i -g -d c:\repos\visualstudio-docs-pr\docs\ide\includes
+```
 
 Find topics with backlinks to redirected topics:
+
+```
 NotInToc.exe -l -d c:\repos\visualstudio-docs-pr\docs\ide
+```
 
 Search recursively for topics that appear more than once in one or more TOC files:
+
+```
 NotInToc.exe -m -d c:\repos\visualstudio-docs-pr\docs\ide
+```
 
 ## Future functionality ideas
 
