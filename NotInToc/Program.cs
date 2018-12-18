@@ -17,8 +17,8 @@ namespace NotInToc
         }
 
         static StringBuilder SimilarFiles = new StringBuilder();
-        static StringBuilder ImagesNotInDictionary = new StringBuilder("\nThe following referenced images were not found in our dictionary. " +
-            "This can happen if the image is in a parent directory of the input directory:\n");
+        static StringBuilder ImagesNotInDictionary = new StringBuilder("\nThe following referenced .png files were not found in our dictionary. " +
+            "This can happen if the image is in a parent directory of the input media directory:\n");
 
         static void Main(string[] args)
         {
@@ -59,13 +59,13 @@ namespace NotInToc
                 // Find orphaned images
                 else if (options.FindOrphanedImages)
                 {
-                    Console.WriteLine($"\nSearching the {options.InputDirectory} directory for orphaned images.\n");
+                    Console.WriteLine($"\nSearching the {options.InputDirectory} directory for orphaned .png files.\n");
 
                     Dictionary<string, int> imageFiles = GetMediaFiles(options.InputDirectory, options.SearchRecursively);
 
                     if (imageFiles.Count == 0)
                     {
-                        Console.WriteLine("\nNo image files were found!");
+                        Console.WriteLine("\nNo .png files were found!");
                         return;
                     }
 
@@ -250,6 +250,7 @@ namespace NotInToc
 
             if (verboseOutput)
             {
+                // This is FYI-only info for the user.
                 Console.WriteLine(ImagesNotInDictionary.ToString());
             }
 
@@ -598,8 +599,8 @@ namespace NotInToc
         }
 
         /// <summary>
-        /// Returns a dictionary of all files in the directory.
-        /// The search includes the specified directory and all its subdirectories.
+        /// Returns a dictionary of all .png files in the directory.
+        /// The search includes the specified directory and (optionally) all its subdirectories.
         /// </summary>
         private static Dictionary<string, int> GetMediaFiles(string mediaDirectory, bool searchRecursively = true)
         {
@@ -609,19 +610,9 @@ namespace NotInToc
 
             Dictionary<string, int> mediaFiles = new Dictionary<string, int>();
 
-            foreach (var file in dir.EnumerateFiles())
+            foreach (var file in dir.EnumerateFiles("*.png", searchOption))
             {
                 mediaFiles.Add(file.FullName.ToLower(), 0);
-            }
-
-            var mediaDirectories = dir.EnumerateDirectories("*", searchOption);
-
-            foreach (var directory in mediaDirectories)
-            {
-                foreach (var file in directory.EnumerateFiles())
-                {
-                    mediaFiles.Add(file.FullName.ToLower(), 0);
-                }
             }
 
             return mediaFiles;
