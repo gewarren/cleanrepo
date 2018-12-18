@@ -6,11 +6,8 @@ namespace NotInToc
     // Define a class to receive parsed values
     class Options
     {
-        [Option('d', "directory", Required = true, HelpText = "Directory to start search for markdown files, or the media directory to search in for orphaned .png files.")]
+        [Option('d', "directory", Required = true, HelpText = "Directory to start search for markdown files, or the media directory to search in for orphaned .png files, or the directory to search in for orphaned INCLUDE files.")]
         public string InputDirectory { get; set; }
-
-        [Option('r', "recursive", DefaultValue = true, Required = false, HelpText = "Search directory and all subdirectories.")]
-        public bool SearchRecursively { get; set; }
 
         [Option('o', "orphaned_topics", HelpText = "Use this option to find orphaned topics.")]
         public bool FindOrphanedTopics { get; set; }
@@ -21,17 +18,20 @@ namespace NotInToc
         [Option('p', "orphaned_images", HelpText = "Use this option to find orphaned .png files.")]
         public bool FindOrphanedImages { get; set; }
 
-        [Option('i', "ignore_redirects", DefaultValue = true, Required = false, HelpText = "Ignore .md files that have a redirect_url tag when looking for orphans.")]
-        public bool IgnoreRedirects { get; set; }
-
-        [Option('v', "verbose", DefaultValue = false, Required = false, HelpText = "Output verbose results.")]
-        public bool Verbose { get; set; }
+        [Option('i', "orphaned_includes", HelpText = "Use this option to find orphaned INCLUDE files.")]
+        public bool FindOrphanedIncludes { get; set; }
 
         [Option('g', "delete", DefaultValue = false, Required = false, HelpText = "Set to true to delete orphaned markdown or .png files.")]
         public bool Delete { get; set; }
 
         [Option('l', "redirects", Required = false, HelpText = "Finds backlinks to redirected files in the specified directory.")]
         public bool FindRedirectedTopicLinks { get; set; }
+
+        [Option('r', "recursive", DefaultValue = true, Required = false, HelpText = "Search directory and all subdirectories.")]
+        public bool SearchRecursively { get; set; }
+
+        [Option('v', "verbose", DefaultValue = false, Required = false, HelpText = "Output verbose results.")]
+        public bool Verbose { get; set; }
 
         [ParserState]
         public IParserState LastParserState { get; set; }

@@ -19,6 +19,8 @@ namespace NotInToc
         static StringBuilder SimilarFiles = new StringBuilder();
         static StringBuilder ImagesNotInDictionary = new StringBuilder("\nThe following referenced .png files were not found in our dictionary. " +
             "This can happen if the image is in a parent directory of the input media directory:\n");
+        static StringBuilder IncludesNotInDictionary = new StringBuilder("\nThe following referenced INCLUDE files were not found in our dictionary. " +
+            "This can happen if the INCLUDE file is in a parent directory of the input 'includes' directory:\n");
 
         static void Main(string[] args)
         {
@@ -43,7 +45,7 @@ namespace NotInToc
                     List<FileInfo> tocFiles = GetTocFiles(options.InputDirectory);
                     List<FileInfo> markdownFiles = GetMarkdownFiles(options.InputDirectory, options.SearchRecursively);
 
-                    ListOrphanedTopics(tocFiles, markdownFiles, options.IgnoreRedirects, options.Verbose, options.Delete);
+                    ListOrphanedTopics(tocFiles, markdownFiles, options.Verbose, options.Delete);
                 }
                 // Find topics referenced multiple times
                 else if (options.FindMultiples)
@@ -70,6 +72,26 @@ namespace NotInToc
                     }
 
                     ListOrphanedImages(options.InputDirectory, imageFiles, options.Verbose, options.Delete);
+                }
+                else if (options.FindOrphanedIncludes)
+                {
+                    if (String.Compare(Path.GetFileName(options.InputDirectory), "includes", true) != 0)
+                    {
+                        Console.WriteLine("Includes directory is not named 'includes'. Program assumes you entered the wrong directory and is exiting.");
+                        return;
+                    }
+
+                    Console.WriteLine($"\nSearching the {options.InputDirectory} directory for orphaned INCLUDE .md files.\n");
+
+                    Dictionary<string, int> includeFiles = GetIncludeFiles(options.InputDirectory, options.SearchRecursively);
+
+                    if (includeFiles.Count == 0)
+                    {
+                        Console.WriteLine("\nNo .md INCLUDE files were found!");
+                        return;
+                    }
+
+                    ListOrphanedIncludes(options.InputDirectory, includeFiles, options.Verbose, options.Delete);
                 }
                 // Find links to topics in the central redirect file
                 else if (options.FindRedirectedTopicLinks)
@@ -106,57 +128,103 @@ namespace NotInToc
             }
         }
 
-        private static void ListRedirectLinks(List<string> redirectedFiles, List<FileInfo> linkingFiles)
+        #region Orphaned includes
+        private static void ListOrphanedIncludes(string inputDirectory, Dictionary<string, int> includeFiles, bool verbose, bool deleteOrphanedIncludes)
         {
-            foreach (string redirectedFile in redirectedFiles)
-            {
-                StringBuilder backlinks = new StringBuilder();
+            // Get all files that could possibly link to the include files
+            var files = GetAllMarkdownFiles(inputDirectory);
 
-                foreach (var linkingFile in linkingFiles)
+            // Gather up all the include references and increment the count for that include file in the Dictionary.
+            foreach (var markdownFile in files)
+            {
+                foreach (string line in File.ReadAllLines(markdownFile.FullName))
                 {
-                    if (IsFileLinkedInFile(redirectedFile, linkingFile))
+                    // Example include reference:
+                    // [!INCLUDE [<title>](<filepath that contains includes/*.md>)]
+
+                    // RegEx pattern to match
+                    string includeLinkPattern = @"\[!INCLUDE[ ]?\[([^\]]*?)\]\(([^\)]*?)includes\/(.*?).md[ ]*\)[ ]*\]";
+
+                    // There could be more than one INCLUDE reference on the line, hence the foreach loop.
+                    foreach (Match match in Regex.Matches(line, includeLinkPattern, RegexOptions.IgnoreCase))
                     {
-                        backlinks.AppendLine(linkingFile.FullName);
+                        string relativePath = GetFilePathFromLink(match.Groups[0].Value);
+
+                        if (relativePath != null)
+                        {
+                            // Construct the full path to the referenced INCLUDE file
+                            string fullPath = Path.Combine(markdownFile.DirectoryName, relativePath);
+
+                            // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
+                            fullPath = Path.GetFullPath(fullPath);
+
+                            if (fullPath != null)
+                            {
+                                // Increment the count for this INCLUDE file in our dictionary
+                                try
+                                {
+                                    includeFiles[fullPath.ToLower()]++;
+                                }
+                                catch (KeyNotFoundException)
+                                {
+                                    IncludesNotInDictionary.AppendLine(fullPath);
+                                }
+                            }
+                        }
                     }
                 }
+            }
 
-                if (backlinks.Length > 0)
+            // Print out the INCLUDE files that have zero references.
+            Console.WriteLine("The following INCLUDE files are not referenced from any .md file:\n");
+            foreach (var includeFile in includeFiles)
+            {
+                if (includeFile.Value == 0)
                 {
-                    Console.WriteLine($"\nRedirected file {redirectedFile} is backlinked from the following files:\n");
-                    Console.Write(backlinks.ToString());
+                    Console.WriteLine(Path.GetFullPath(includeFile.Key));
+                }
+            }
+
+            if (verbose)
+            {
+                // This is FYI-only info for the user.
+                Console.WriteLine(IncludesNotInDictionary.ToString());
+            }
+
+            if (deleteOrphanedIncludes)
+            {
+                Console.WriteLine("\nDeleting orphaned INCLUDE files...\n");
+
+                // Delete orphaned image files
+                foreach (var includeFile in includeFiles)
+                {
+                    if (includeFile.Value == 0)
+                    {
+                        Console.WriteLine($"Deleting {includeFile.Key}.");
+                        File.Delete(includeFile.Key);
+                    }
                 }
             }
         }
 
-        private static void GetAllRedirectedFiles(FileInfo redirectsFile, List<string> redirectedFiles)
+        private static Dictionary<string, int> GetIncludeFiles(string inputDirectory, bool searchRecursively)
         {
-            foreach (string line in File.ReadAllLines(redirectsFile.FullName))
+            DirectoryInfo dir = new DirectoryInfo(inputDirectory);
+
+            SearchOption searchOption = searchRecursively ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
+
+            Dictionary<string, int> includeFiles = new Dictionary<string, int>();
+
+            foreach (var file in dir.EnumerateFiles("*.md", searchOption))
             {
-                // Example line that we're interested in:
-                // "source_path": "docs/extensibility/shell/shell-isolated-or-integrated.md",
-
-                // RegEx pattern to match
-                string redirectPattern = @"""source_path"": ""(.*)""";
-
-                // There could be more than one image reference on the line, hence the foreach loop.
-                foreach (Match match in Regex.Matches(line, redirectPattern))
-                {
-                    string relativePath = GetFilePathFromSourcePath(match.Groups[0].Value);
-
-                    if (relativePath != null)
-                    {
-                        // Construct the full path to the referenced image file
-                        string fullPath = Path.Combine(redirectsFile.DirectoryName, relativePath);
-
-                        // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
-                        fullPath = Path.GetFullPath(fullPath);
-
-                        redirectedFiles.Add(fullPath);
-                    }
-                }
+                includeFiles.Add(file.FullName.ToLower(), 0);
             }
-        }
 
+            return includeFiles;
+        }
+        #endregion
+
+        #region Orphaned images
         /// <summary>
         /// If any of the input image files are not
         /// referenced from a markdown (.md) file anywhere in the directory structure, including up the directory 
@@ -271,6 +339,189 @@ namespace NotInToc
         }
 
         /// <summary>
+        /// Returns a dictionary of all .png files in the directory.
+        /// The search includes the specified directory and (optionally) all its subdirectories.
+        /// </summary>
+        private static Dictionary<string, int> GetMediaFiles(string mediaDirectory, bool searchRecursively = true)
+        {
+            DirectoryInfo dir = new DirectoryInfo(mediaDirectory);
+
+            SearchOption searchOption = searchRecursively ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
+
+            Dictionary<string, int> mediaFiles = new Dictionary<string, int>();
+
+            foreach (var file in dir.EnumerateFiles("*.png", searchOption))
+            {
+                mediaFiles.Add(file.FullName.ToLower(), 0);
+            }
+
+            return mediaFiles;
+        }
+        #endregion
+
+        #region Orphaned topics
+        /// <summary>
+        /// Lists the files that aren't in a TOC.
+        /// Optionally, only list files that don't have a redirect_url metadata tag.
+        /// </summary>
+        private static void ListOrphanedTopics(List<FileInfo> tocFiles, List<FileInfo> markdownFiles, bool verboseOutput, bool deleteOrphanedTopics)
+        {
+            int countNotFound = 0;
+
+            StringBuilder sb = new StringBuilder("\nTopics not in any TOC file:\n");
+
+            foreach (var markdownFile in markdownFiles)
+            {
+                bool found = false;
+
+                // If the file is in the Includes directory, or the file is a TOC itself, ignore it
+                if (markdownFile.FullName.Contains("\\includes\\") || String.Compare(markdownFile.Name, "TOC.md") == 0 || String.Compare(markdownFile.Name, "TOC.yml") == 0)
+                    continue;
+
+                foreach (var tocFile in tocFiles)
+                {
+                    if (!IsFileLinkedInFile(markdownFile, tocFile))
+                    {
+                        continue;
+                    }
+
+                    found = true;
+                    break;
+                }
+
+                if (!found)
+                {
+                    countNotFound++;
+                    sb.AppendLine(markdownFile.FullName);
+
+                    // Delete the file if the option is set.
+                    if (deleteOrphanedTopics)
+                    {
+                        Console.WriteLine($"Deleting {markdownFile.FullName}.");
+                        File.Delete(markdownFile.FullName);
+                    }
+                }
+            }
+
+            sb.AppendLine($"\nFound {countNotFound} total .md files that are not referenced in a TOC.\n");
+            Console.Write(sb.ToString());
+
+            if (verboseOutput)
+            {
+                Console.WriteLine("Similar file names:\n" + SimilarFiles.ToString());
+            }
+        }
+        #endregion
+
+        #region Redirected files
+        private static void ListRedirectLinks(List<string> redirectedFiles, List<FileInfo> linkingFiles)
+        {
+            foreach (string redirectedFile in redirectedFiles)
+            {
+                StringBuilder backlinks = new StringBuilder();
+
+                foreach (var linkingFile in linkingFiles)
+                {
+                    if (IsFileLinkedInFile(redirectedFile, linkingFile))
+                    {
+                        backlinks.AppendLine(linkingFile.FullName);
+                    }
+                }
+
+                if (backlinks.Length > 0)
+                {
+                    Console.WriteLine($"\nRedirected file {redirectedFile} is backlinked from the following files:\n");
+                    Console.Write(backlinks.ToString());
+                }
+            }
+        }
+
+        private static void GetAllRedirectedFiles(FileInfo redirectsFile, List<string> redirectedFiles)
+        {
+            foreach (string line in File.ReadAllLines(redirectsFile.FullName))
+            {
+                // Example line that we're interested in:
+                // "source_path": "docs/extensibility/shell/shell-isolated-or-integrated.md",
+
+                // RegEx pattern to match
+                string redirectPattern = @"""source_path"": ""(.*)""";
+
+                // There could be more than one image reference on the line, hence the foreach loop.
+                foreach (Match match in Regex.Matches(line, redirectPattern))
+                {
+                    string relativePath = GetFilePathFromSourcePath(match.Groups[0].Value);
+
+                    if (relativePath != null)
+                    {
+                        // Construct the full path to the referenced image file
+                        string fullPath = Path.Combine(redirectsFile.DirectoryName, relativePath);
+
+                        // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
+                        fullPath = Path.GetFullPath(fullPath);
+
+                        redirectedFiles.Add(fullPath);
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Checks if the specified file path is referenced in the specified file.
+        /// </summary>
+        private static bool IsFileLinkedInFile(string linkedFile, FileInfo linkingFile)
+        {
+            FileInfo file = new FileInfo(linkedFile);
+            return IsFileLinkedInFile(file, linkingFile);
+        }
+
+        private static string GetFilePathFromSourcePath(string text)
+        {
+            // "source_path": "docs/extensibility/shell/shell-isolated-or-integrated.md",
+
+            if (text.Contains("source_path"))
+            {
+                // Grab the text that starts after "source_path": "
+                text = text.Substring(16);
+
+                // Trim the final quotation mark and comma
+                text = text.TrimEnd('"', ',');
+
+                return text;
+            }
+            else
+            {
+                throw new ArgumentException($"Argument 'line' does not contain an expected redirect source path.");
+            }
+        }
+
+        private static FileInfo GetRedirectsFile(string inputDirectory)
+        {
+            DirectoryInfo dir = new DirectoryInfo(inputDirectory);
+
+            try
+            {
+                FileInfo[] files = dir.GetFiles(".openpublishing.redirection.json", SearchOption.TopDirectoryOnly);
+                while (dir.GetFiles(".openpublishing.redirection.json", SearchOption.TopDirectoryOnly).Length == 0)
+                {
+                    dir = dir.Parent;
+
+                    // Loop exit condition.
+                    if (dir == dir.Root)
+                        return null;
+                }
+
+                return dir.GetFiles(".openpublishing.redirection.json", SearchOption.TopDirectoryOnly)[0];
+            }
+            catch (DirectoryNotFoundException)
+            {
+                Console.WriteLine($"Could not find directory {dir.FullName}");
+                throw;
+            }
+        }
+        #endregion
+
+        #region Popular files
+        /// <summary>
         /// Finds topics that appear more than once, either in one TOC.md file, or multiple TOC.md files.
         /// </summary>
         private static void ListPopularFiles(List<FileInfo> tocFiles, List<FileInfo> markdownFiles)
@@ -302,80 +553,9 @@ namespace NotInToc
                 }
             }
         }
+        #endregion
 
-        /// <summary>
-        /// Lists the files that aren't in a TOC.
-        /// Optionally, only list files that don't have a redirect_url metadata tag.
-        /// </summary>
-        private static void ListOrphanedTopics(List<FileInfo> tocFiles, List<FileInfo> markdownFiles, bool ignoreFilesWithRedirectUrl, bool verboseOutput, bool deleteOrphanedTopics)
-        {
-            int countNotFound = 0;
-
-            StringBuilder sb = new StringBuilder("\nTopics not in any TOC file:\n");
-
-            foreach (var markdownFile in markdownFiles)
-            {
-                bool found = false;
-
-                // If the file is in the Includes directory, or the file is a TOC itself, ignore it
-                if (markdownFile.FullName.Contains("\\includes\\") || String.Compare(markdownFile.Name, "TOC.md") == 0 || String.Compare(markdownFile.Name, "TOC.yml") == 0)
-                    continue;
-
-                foreach (var tocFile in tocFiles)
-                {
-                    if (!IsFileLinkedInFile(markdownFile, tocFile))
-                    {
-                        continue;
-                    }
-
-                    found = true;
-                    break;
-                }
-
-                if (!found)
-                {
-                    bool redirect = false;
-
-                    // Check if the topic has a redirect_url tag
-                    if (ignoreFilesWithRedirectUrl)
-                    {
-                        redirect = FileContainsRedirectUrl(markdownFile);
-                    }
-
-                    // If it's not a redirected topic, or we're not ignoring redirected topic, report this file.
-                    if (!redirect)
-                    {
-                        countNotFound++;
-                        sb.AppendLine(markdownFile.FullName);
-
-                        // Delete the file if the option is set.
-                        if (deleteOrphanedTopics)
-                        {
-                            Console.WriteLine($"Deleting {markdownFile.FullName}.");
-                            File.Delete(markdownFile.FullName);
-                        }
-                    }
-                }
-            }
-
-            sb.AppendLine($"\nFound {countNotFound} total .md files that are not referenced in a TOC.\n");
-            Console.Write(sb.ToString());
-
-            if (verboseOutput)
-            {
-                Console.WriteLine("Similar file names:\n" + SimilarFiles.ToString());
-            }
-        }
-
-        /// <summary>
-        /// Checks if the specified file path is referenced in the specified file.
-        /// </summary>
-        private static bool IsFileLinkedInFile(string linkedFile, FileInfo linkingFile)
-        {
-            FileInfo file = new FileInfo(linkedFile);
-            return IsFileLinkedInFile(file, linkingFile);
-        }
-
+        #region Generic helper methods
         /// <summary>
         /// Checks if the specified file path is referenced in the specified file.
         /// </summary>
@@ -433,26 +613,6 @@ namespace NotInToc
 
             // We did not find this file linked in the specified file.
             return false;
-        }
-
-        private static string GetFilePathFromSourcePath(string text)
-        {
-            // "source_path": "docs/extensibility/shell/shell-isolated-or-integrated.md",
-
-            if (text.Contains("source_path"))
-            {
-                // Grab the text that starts after "source_path": "
-                text = text.Substring(16);
-
-                // Trim the final quotation mark and comma
-                text = text.TrimEnd('"', ',');
-
-                return text;
-            }
-            else
-            {
-                throw new ArgumentException($"Argument 'line' does not contain an expected redirect source path.");
-            }
         }
 
         /// <summary>
@@ -599,26 +759,6 @@ namespace NotInToc
         }
 
         /// <summary>
-        /// Returns a dictionary of all .png files in the directory.
-        /// The search includes the specified directory and (optionally) all its subdirectories.
-        /// </summary>
-        private static Dictionary<string, int> GetMediaFiles(string mediaDirectory, bool searchRecursively = true)
-        {
-            DirectoryInfo dir = new DirectoryInfo(mediaDirectory);
-
-            SearchOption searchOption = searchRecursively ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
-
-            Dictionary<string, int> mediaFiles = new Dictionary<string, int>();
-
-            foreach (var file in dir.EnumerateFiles("*.png", searchOption))
-            {
-                mediaFiles.Add(file.FullName.ToLower(), 0);
-            }
-
-            return mediaFiles;
-        }
-
-        /// <summary>
         /// Gets all TOC.* files recursively, starting in the specified directory if it contains "docfx.json" file.
         /// Otherwise it looks up the directory path until it finds a "docfx.json" file. Then it starts the recursive search
         /// for TOC.* files from that directory.
@@ -631,33 +771,6 @@ namespace NotInToc
             dir = GetDocFxDirectory(dir);
 
             return dir.EnumerateFiles("TOC.*", SearchOption.AllDirectories).ToList();
-        }
-
-        /// <summary>
-        /// </summary>
-        private static FileInfo GetRedirectsFile(string inputDirectory)
-        {
-            DirectoryInfo dir = new DirectoryInfo(inputDirectory);
-
-            try
-            {
-                FileInfo[] files = dir.GetFiles(".openpublishing.redirection.json", SearchOption.TopDirectoryOnly);
-                while (dir.GetFiles(".openpublishing.redirection.json", SearchOption.TopDirectoryOnly).Length == 0)
-                {
-                    dir = dir.Parent;
-
-                    // Loop exit condition.
-                    if (dir == dir.Root)
-                        return null;
-                }
-
-                return dir.GetFiles(".openpublishing.redirection.json", SearchOption.TopDirectoryOnly)[0];
-            }
-            catch (DirectoryNotFoundException)
-            {
-                Console.WriteLine($"Could not find directory {dir.FullName}");
-                throw;
-            }
         }
 
         /// <summary>
@@ -684,22 +797,6 @@ namespace NotInToc
 
             return dir;
         }
-
-        /// <summary>
-        /// Returns true if the specified file contains a "redirect_url" metadata tag.
-        /// </summary>
-        private static bool FileContainsRedirectUrl(FileInfo markdownFile)
-        {
-            foreach (var line in File.ReadAllLines(markdownFile.FullName))
-            {
-                // If the file has a redirect_url metadata tag, return true
-                if (line.Contains("redirect_url:"))
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
+        #endregion
     }
 }
