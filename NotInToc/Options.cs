@@ -27,7 +27,10 @@ namespace NotInToc
         [Option('l', "redirects", Required = false, HelpText = "Finds backlinks to redirected files in the specified directory.")]
         public bool FindRedirectedTopicLinks { get; set; }
 
-        [Option('r', "recursive", DefaultValue = true, Required = false, HelpText = "Search directory and all subdirectories.")]
+        [Option('r', "replace_redirects", DefaultValue = false, Required = false, HelpText = "Set to true to replace links to redirected files with their target URL.")]
+        public bool ReplaceLinks { get; set; }
+
+        [Option('s', "recursive", DefaultValue = true, Required = false, HelpText = "Search directory and all subdirectories.")]
         public bool SearchRecursively { get; set; }
 
         [Option('v', "verbose", DefaultValue = false, Required = false, HelpText = "Output verbose results.")]

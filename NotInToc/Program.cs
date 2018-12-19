@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Newtonsoft.Json;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -108,16 +109,16 @@ namespace NotInToc
                     }
 
                     // Put all the redirected files in a list
-                    List<string> redirectedFiles = new List<string>();
-                    GetAllRedirectedFiles(redirectsFile, redirectedFiles);
+                    List<Redirect> redirects;
+                    GetAllRedirectedFiles(redirectsFile, out redirects);
 
                     // Get all the markdown and YAML files.
                     List<FileInfo> linkingFiles = GetMarkdownFiles(options.InputDirectory, options.SearchRecursively);
                     linkingFiles.AddRange(GetYAMLFiles(options.InputDirectory, options.SearchRecursively));
 
-                    // Check all links, including in toc.yml, to files in the redirects Dictionary.
+                    // Check all links, including in toc.yml, to files in the redirects list.
                     // Output the files that contain links to redirected topics, as well as the bad links.
-                    ListRedirectLinks(redirectedFiles, linkingFiles);
+                    ListRedirectLinks(redirects, linkingFiles, options.ReplaceLinks);
 
                     Console.WriteLine("\nDONE");
                 }
@@ -414,15 +415,55 @@ namespace NotInToc
         #endregion
 
         #region Redirected files
-        private static void ListRedirectLinks(List<string> redirectedFiles, List<FileInfo> linkingFiles)
+        private class Redirect
         {
-            foreach (string redirectedFile in redirectedFiles)
+            public string source_path;
+            public string redirect_url;
+            public bool redirect_document_id;
+        }
+
+        private static List<Redirect> LoadRedirectJson(FileInfo redirectsFile)
+        {
+            using (StreamReader reader = new StreamReader(redirectsFile.FullName))
+            {
+                string json = reader.ReadToEnd();
+
+                // Trim the string so we're just left with an array of redirect objects
+                json = json.Substring(json.IndexOf('['));
+                json = json.TrimEnd('}');
+
+                return JsonConvert.DeserializeObject<List<Redirect>>(json);
+            }
+        }
+
+        private static void GetAllRedirectedFiles(FileInfo redirectsFile, out List<Redirect> redirects)
+        {
+            redirects = LoadRedirectJson(redirectsFile);
+
+            foreach (Redirect redirect in redirects)
+            {
+                if (redirect.source_path != null)
+                {
+                    // Construct the full path to the redirected file
+                    string fullPath = Path.Combine(redirectsFile.DirectoryName, redirect.source_path);
+
+                    // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
+                    fullPath = Path.GetFullPath(fullPath);
+
+                    redirect.source_path = fullPath;
+                }
+            }
+        }
+
+        private static void ListRedirectLinks(List<Redirect> redirects, List<FileInfo> linkingFiles, bool replaceLinks)
+        {
+            foreach (Redirect redirect in redirects)
             {
                 StringBuilder backlinks = new StringBuilder();
 
                 foreach (var linkingFile in linkingFiles)
                 {
-                    if (IsFileLinkedInFile(redirectedFile, linkingFile))
+                    if (IsRedirectedFileLinkedFromFile(redirect, linkingFile, replaceLinks))
                     {
                         backlinks.AppendLine(linkingFile.FullName);
                     }
@@ -430,68 +471,86 @@ namespace NotInToc
 
                 if (backlinks.Length > 0)
                 {
-                    Console.WriteLine($"\nRedirected file {redirectedFile} is backlinked from the following files:\n");
+                    Console.WriteLine($"\nRedirected file '{redirect.source_path}' is backlinked from the following files:\n");
                     Console.Write(backlinks.ToString());
-                }
-            }
-        }
-
-        private static void GetAllRedirectedFiles(FileInfo redirectsFile, List<string> redirectedFiles)
-        {
-            foreach (string line in File.ReadAllLines(redirectsFile.FullName))
-            {
-                // Example line that we're interested in:
-                // "source_path": "docs/extensibility/shell/shell-isolated-or-integrated.md",
-
-                // RegEx pattern to match
-                string redirectPattern = @"""source_path"": ""(.*)""";
-
-                // There could be more than one image reference on the line, hence the foreach loop.
-                foreach (Match match in Regex.Matches(line, redirectPattern))
-                {
-                    string relativePath = GetFilePathFromSourcePath(match.Groups[0].Value);
-
-                    if (relativePath != null)
-                    {
-                        // Construct the full path to the referenced image file
-                        string fullPath = Path.Combine(redirectsFile.DirectoryName, relativePath);
-
-                        // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
-                        fullPath = Path.GetFullPath(fullPath);
-
-                        redirectedFiles.Add(fullPath);
-                    }
+                    Console.WriteLine();
                 }
             }
         }
 
         /// <summary>
         /// Checks if the specified file path is referenced in the specified file.
+        /// Optionally replaces the link with a different URL.
         /// </summary>
-        private static bool IsFileLinkedInFile(string linkedFile, FileInfo linkingFile)
+        private static bool IsRedirectedFileLinkedFromFile(Redirect redirect, FileInfo linkingFile, bool replaceLink)
         {
-            FileInfo file = new FileInfo(linkedFile);
-            return IsFileLinkedInFile(file, linkingFile);
-        }
+            FileInfo redirectedFile = new FileInfo(redirect.source_path);
 
-        private static string GetFilePathFromSourcePath(string text)
-        {
-            // "source_path": "docs/extensibility/shell/shell-isolated-or-integrated.md",
+            bool foundLink = false;
+            string relativePath = null;
 
-            if (text.Contains("source_path"))
+            foreach (string line in File.ReadAllLines(linkingFile.FullName))
             {
-                // Grab the text that starts after "source_path": "
-                text = text.Substring(16);
+                relativePath = null;
 
-                // Trim the final quotation mark and comma
-                text = text.TrimEnd('"', ',');
+                if (line.Contains("](")) // Markdown style link
+                {
+                    // If the file name is somewhere in the line of text...
+                    if (line.Contains("(" + redirectedFile.Name) || line.Contains("/" + redirectedFile.Name))
+                    {
+                        // Now verify the file path to ensure we're talking about the same file
+                        relativePath = GetFilePathFromLink(line);
+                    }
+                }
+                else if (line.Contains("href:")) // YAML style link
+                {
+                    // If the file name is somewhere in the line of text...
+                    if (line.Contains(redirectedFile.Name))
+                    {
+                        // Now verify the file path to ensure we're talking about the same file
+                        relativePath = GetFilePathFromLink(line);
+                    }
+                }
 
-                return text;
+                if (relativePath != null)
+                {
+                    // Construct the full path to the referenced file
+                    string fullPath = Path.Combine(linkingFile.DirectoryName, relativePath);
+
+                    // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
+                    fullPath = Path.GetFullPath(fullPath);
+                    if (fullPath != null)
+                    {
+                        // See if our constructed path matches the actual file we think it is
+                        if (String.Compare(fullPath, redirectedFile.FullName) == 0)
+                        {
+                            foundLink = true;
+                            break;
+                        }
+                        else
+                        {
+                            // If we get here, the file name matched but the full path did not.
+
+                            // We expect a lot of index.md names, so no need to spit out all similarities
+                            if (redirectedFile.Name != "index.md")
+                            {
+                                SimilarFiles.AppendLine($"File '{redirectedFile.FullName}' has same file name as a file in {linkingFile.FullName}: '{line}'");
+                            }
+                        }
+                    }
+                }
             }
-            else
+
+            if (foundLink && replaceLink)
             {
-                throw new ArgumentException($"Argument 'line' does not contain an expected redirect source path.");
+                Console.WriteLine($"Replacing '{relativePath}' with '{redirect.redirect_url}' in '{linkingFile.Name}'.");
+
+                string str = File.ReadAllText(linkingFile.FullName);
+                str = str.Replace(relativePath, redirect.redirect_url);
+                File.WriteAllText(linkingFile.FullName, str);
             }
+
+            return foundLink;
         }
 
         private static FileInfo GetRedirectsFile(string inputDirectory)
@@ -561,12 +620,11 @@ namespace NotInToc
         /// </summary>
         private static bool IsFileLinkedInFile(FileInfo linkedFile, FileInfo linkingFile)
         {
-            // Read all the .md files listed in the TOC file
             foreach (string line in File.ReadAllLines(linkingFile.FullName))
             {
                 string relativePath = null;
 
-                if (line.Contains("](")) // TOC.md style link
+                if (line.Contains("](")) // Markdown style link
                 {
                     // If the file name is somewhere in the line of text...
                     if (line.Contains("(" + linkedFile.Name) || line.Contains("/" + linkedFile.Name))
@@ -575,7 +633,7 @@ namespace NotInToc
                         relativePath = GetFilePathFromLink(line);
                     }
                 }
-                else if (line.Contains("href:")) // TOC.yml style link
+                else if (line.Contains("href:")) // YAML style link
                 {
                     // If the file name is somewhere in the line of text...
                     if (line.Contains(linkedFile.Name))
@@ -587,7 +645,7 @@ namespace NotInToc
 
                 if (relativePath != null)
                 {
-                    // Construct the full path to the referenced markdown file
+                    // Construct the full path to the referenced file
                     string fullPath = Path.Combine(linkingFile.DirectoryName, relativePath);
 
                     // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
@@ -601,6 +659,8 @@ namespace NotInToc
                         }
                         else
                         {
+                            // If we get here, the file name matched but the full path did not.
+
                             // We expect a lot of index.md names, so no need to spit out all similarities
                             if (linkedFile.Name != "index.md")
                             {
@@ -617,7 +677,7 @@ namespace NotInToc
 
         /// <summary>
         /// Returns the file path from the specified text that contains 
-        /// either the pattern "[text](file path)" or "img src=".
+        /// either the pattern "[text](file path)", "href:", or "img src=".
         /// Returns null if the file is in a different repo or is an http URL.
         /// </summary>
         private static string GetFilePathFromLink(string text)
