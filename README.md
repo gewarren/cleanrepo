@@ -1,52 +1,72 @@
 # not-in-toc
 
-This tool helps you find TOC-related topic issues.
+This tool helps you find topics that aren't linked from a TOC file, orphaned .png files, orphaned .md files in an 'includes' directory, and more.
 
 ## Usage
 
-  -d, --directory           Required. Directory to start search for markdown
-                            files, or the media directory to search in for
-                            orphaned images.
+  -d, --directory            Required. Directory to start search for markdown files, or the media directory to search in for orphaned
+                              .png files, or the directory to search in for orphaned INCLUDE files.
 
-  -r, --recursive           (Default: True) Search directory and all
-                            subdirectories.
+  -o, --orphaned_topics      Use this option to find orphaned topics.
 
-  -o, --orphaned_topics     Use this option to find orphaned topics.
+  -m, --multiples            Use this option to find topics that appear more than once in one or separate TOC.md files.
 
-  -m, --multiples           Use this option to find topics that appear more
-                            than once in one or separate TOC.md files.
+  -p, --orphaned_images      Use this option to find orphaned .png files.
 
-  -p, --orphaned_images     Use this option to find orphaned images.
+  -i, --orphaned_includes    Use this option to find orphaned INCLUDE files.
 
-  -i, --ignore_redirects    (Default: True) Ignore .md files that have a
-                            redirect_url tag when looking for orphans.
+  -g, --delete               (Default: False) Set to true to delete orphaned markdown or .png files.
 
-  -v, --verbose             (Default: False) Output verbose results.
+  -l, --redirects            Finds backlinks to redirected files in the specified directory.
 
-  -g, --delete              (Default: False) Set to true to delete orphaned
-                            image files.
+  -r, --recursive            (Default: True) Search directory and all subdirectories.
 
-  -l, --redirects           Finds backlinks to redirected files in the
-                            specified directory.
+  -v, --verbose              (Default: False) Output verbose results.
 
-  --help                    Display this help screen.
+  --help                     Display this help screen.
 
 ## Usage examples
 
-Search for orphaned topics recursively:
-Contentment.exe -o -d c:\Users\gewarren\visualstudio-docs-pr\docs\ide
+Find orphaned topics recursively:
 
-Search for orphaned topics non-recursively, ignoring topics that have a redirect_url tag:
-Contentment.exe -o -r false -i false -d c:\Users\gewarren\visualstudio-docs-pr\docs\ide
+```
+NotInToc.exe -o -d c:\repos\visualstudio-docs-pr\docs\ide
+```
+
+Find orphaned topics non-recursively:
+
+```
+NotInToc.exe -o -r false -d c:\repos\visualstudio-docs-pr\docs\ide
+```
+
+Find orphaned .png files (recursive):
+
+```
+NotInToc.exe -p -d c:\repos\visualstudio-docs-pr\docs\ide\media
+```
+
+Find and delete orphaned INCLUDE files (recursive):
+
+```
+NotInToc.exe -i -g -d c:\repos\visualstudio-docs-pr\docs\ide\includes
+```
+
+Find topics with backlinks to redirected topics:
+
+```
+NotInToc.exe -l -d c:\repos\visualstudio-docs-pr\docs\ide
+```
 
 Search recursively for topics that appear more than once in one or more TOC files:
-Contentment.exe -m -d c:\Users\gewarren\visualstudio-docs-pr\docs\extensibility
+
+```
+NotInToc.exe -m -d c:\repos\visualstudio-docs-pr\docs\ide
+```
 
 ## Future functionality ideas
 
 - Given a file name, show the TOC files it is referenced in (although this type of search can easily be done in e.g. VS Code,
   with a search scope of TOC.md files).
-- Show orphaned include files.
-- Show orphaned code snippets.
+- Find orphaned code snippets.
 - Do a friendly diff of two TOC files: number of topics in each, topics in one file but not the other,
   sub-node comparisons, (nodes that have a link in one file but not the other)
