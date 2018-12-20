@@ -72,7 +72,7 @@ namespace CleanRepo
                 {
                     if (String.Compare(Path.GetFileName(options.InputDirectory), "includes", true) != 0)
                     {
-                        Console.WriteLine("Includes directory is not named 'includes'. Program assumes you entered the wrong directory and is exiting.");
+                        Console.WriteLine("\nIncludes directory is not named 'includes'. Program assumes you entered the wrong directory and is exiting.");
                         return;
                     }
 
@@ -131,16 +131,19 @@ namespace CleanRepo
         ///          If found, BREAK to the next include file
         private static void ListOrphanedIncludes(string inputDirectory, Dictionary<string, int> includeFiles, bool verbose, bool deleteOrphanedIncludes)
         {
+            DirectoryInfo rootDirectory = null;
+
             // Get all files that could possibly link to the include files
-            var files = GetAllMarkdownFiles(inputDirectory);
+            var files = GetAllMarkdownFiles(inputDirectory, out rootDirectory);
 
             // Gather up all the include references and increment the count for that include file in the Dictionary.
             foreach (var markdownFile in files)
             {
                 foreach (string line in File.ReadAllLines(markdownFile.FullName))
                 {
-                    // Example include reference:
-                    // [!INCLUDE [<title>](<filepath that contains includes/*.md>)]
+                    // Example include references:
+                    // [!INCLUDE [DotNet Restore Note](../includes/dotnet-restore-note.md)]
+                    // [!INCLUDE[DotNet Restore Note](~/includes/dotnet-restore-note.md)]
 
                     // RegEx pattern to match
                     string includeLinkPattern = @"\[!INCLUDE[ ]?\[([^\]]*?)\]\(([^\)]*?)includes\/(.*?).md[ ]*\)[ ]*\]";
@@ -152,10 +155,20 @@ namespace CleanRepo
 
                         if (relativePath != null)
                         {
-                            // Construct the full path to the referenced INCLUDE file
-                            string fullPath = Path.Combine(markdownFile.DirectoryName, relativePath);
+                            string fullPath;
 
-                            // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
+                            // Path could start with a tilde e.g. ~/includes/dotnet-restore-note.md
+                            if (relativePath.StartsWith("~/"))
+                            {
+                                fullPath = Path.Combine(rootDirectory.FullName, relativePath.TrimStart('~', '/'));
+                            }
+                            else
+                            {
+                                // Construct the full path to the referenced INCLUDE file
+                                fullPath = Path.Combine(markdownFile.DirectoryName, relativePath);
+                            }
+
+                            // Clean up the path by replacing forward slashes with back slashes, removing extra dots, etc.
                             fullPath = Path.GetFullPath(fullPath);
 
                             if (fullPath != null)
@@ -237,7 +250,8 @@ namespace CleanRepo
         ///          If found, BREAK to the next image
         private static void ListOrphanedImages(string inputDirectory, Dictionary<string, int> imageFiles, bool verboseOutput, bool deleteOrphanedImages)
         {
-            var files = GetAllMarkdownFiles(inputDirectory);
+            DirectoryInfo rootDirectory = null;
+            var files = GetAllMarkdownFiles(inputDirectory, out rootDirectory);
 
             // Gather up all the image references and increment the count for that image in the Dictionary.
             foreach (var markdownFile in files)
@@ -822,14 +836,12 @@ namespace CleanRepo
         /// <summary>
         /// Gets all *.md files recursively, starting in the ancestor directory that contains docfx.json.
         /// </summary>
-        private static List<FileInfo> GetAllMarkdownFiles(string directoryPath)
+        private static List<FileInfo> GetAllMarkdownFiles(string directoryPath, out DirectoryInfo rootDirectory)
         {
-            DirectoryInfo dir = new DirectoryInfo(directoryPath);
-
             // Look further up the path until we find docfx.json
-            dir = GetDocFxDirectory(dir);
+            rootDirectory = GetDocFxDirectory(new DirectoryInfo(directoryPath));
 
-            return dir.EnumerateFiles("*.md", SearchOption.AllDirectories).ToList();
+            return rootDirectory.EnumerateFiles("*.md", SearchOption.AllDirectories).ToList();
         }
 
         /// <summary>
