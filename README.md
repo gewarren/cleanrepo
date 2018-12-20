@@ -1,6 +1,6 @@
 # not-in-toc
 
-This tool helps you find topics that aren't linked from a TOC file, orphaned .png files, orphaned .md files in an 'includes' directory, and more.
+This tool helps you find topics that aren't linked from a TOC file, orphaned .png files, and orphaned .md files in an 'includes' directory. It can also find (and optionally replace) links to redirected files.
 
 ## Usage
 
@@ -17,9 +17,12 @@ This tool helps you find topics that aren't linked from a TOC file, orphaned .pn
 
   -g, --delete               (Default: False) Set to true to delete orphaned markdown or .png files.
 
-  -l, --redirects            Finds backlinks to redirected files in the specified directory.
+  -l, --redirects            Finds backlinks to redirected files in the
+                             specified directory.
 
-  -r, --recursive            (Default: True) Search directory and all subdirectories.
+  -r, --replace_redirects    (Default: False) Set to true to replace links to redirected files with their target URL.
+
+  -s, --recursive            (Default: True) Search directory and all subdirectories.
 
   -v, --verbose              (Default: False) Output verbose results.
 
@@ -36,7 +39,7 @@ NotInToc.exe -o -d c:\repos\visualstudio-docs-pr\docs\ide
 Find orphaned topics non-recursively:
 
 ```
-NotInToc.exe -o -r false -d c:\repos\visualstudio-docs-pr\docs\ide
+NotInToc.exe -o -s false -d c:\repos\visualstudio-docs-pr\docs\ide
 ```
 
 Find orphaned .png files (recursive):
