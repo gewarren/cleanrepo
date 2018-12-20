@@ -253,7 +253,7 @@ namespace CleanRepo
                     //string linkRegEx = linkingFile.Extension.ToLower() == ".yml" ? @"href: (.)*\.md" : @"]\((?!http)([^\)])*\.md\)";
 
                     // RegEx pattern to match
-                    string imageLinkPattern = @"\]\(([^\)])*\.png\)";
+                    string imageLinkPattern = @"\]\(([^\)])*\.png([^\)])*\)";
 
                     // There could be more than one image reference on the line, hence the foreach loop.
                     foreach (Match match in Regex.Matches(line, imageLinkPattern))
