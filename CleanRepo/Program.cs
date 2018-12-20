@@ -393,14 +393,15 @@ namespace CleanRepo
         {
             int countNotFound = 0;
 
-            StringBuilder sb = new StringBuilder("\nTopics not in any TOC file:\n\n");
+            StringBuilder output = new StringBuilder("\nTopics not in any TOC file:\n\n");
 
             foreach (var markdownFile in markdownFiles)
             {
                 bool found = false;
 
                 // If the file is in the Includes directory, or the file is a TOC itself, ignore it
-                if (markdownFile.FullName.Contains("\\includes\\")
+                if (markdownFile.FullName.Contains("\\includes\\") 
+                    || markdownFile.FullName.Contains("\\misc\\")
                     || String.Compare(markdownFile.Name, "TOC.md", true) == 0
                     || String.Compare(markdownFile.Name, "index.md", true) == 0)
                     continue;
@@ -419,19 +420,19 @@ namespace CleanRepo
                 if (!found)
                 {
                     countNotFound++;
-                    sb.AppendLine(markdownFile.FullName);
+                    output.AppendLine(markdownFile.FullName);
 
                     // Delete the file if the option is set.
                     if (deleteOrphanedTopics)
                     {
-                        Console.WriteLine($"Deleting {markdownFile.FullName}.");
+                        output.AppendLine($"DELETING '{markdownFile.FullName}'.");
                         File.Delete(markdownFile.FullName);
                     }
                 }
             }
 
-            sb.AppendLine($"\nFound {countNotFound} total .md files that are not referenced in a TOC.\n");
-            Console.Write(sb.ToString());
+            output.AppendLine($"\nFound {countNotFound} total .md files that are not referenced in a TOC.\n");
+            Console.Write(output.ToString());
         }
 
         private static bool IsFileLinkedFromTocFile(FileInfo linkedFile, FileInfo tocFile)
