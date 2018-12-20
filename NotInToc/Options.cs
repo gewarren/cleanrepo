@@ -1,7 +1,7 @@
 ﻿using CommandLine;
 using CommandLine.Text;
 
-namespace NotInToc
+namespace CleanRepo
 {
     // Define a class to receive parsed values
     class Options
