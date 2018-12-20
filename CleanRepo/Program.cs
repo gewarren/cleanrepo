@@ -274,7 +274,7 @@ namespace CleanRepo
                     string imageLinkPattern = @"\]\(([^\)])*\.png([^\)])*\)";
 
                     // There could be more than one image reference on the line, hence the foreach loop.
-                    foreach (Match match in Regex.Matches(line, imageLinkPattern))
+                    foreach (Match match in Regex.Matches(line, imageLinkPattern, RegexOptions.IgnoreCase))
                     {
                         string relativePath = GetFilePathFromLink(match.Groups[0].Value);
 
@@ -442,7 +442,7 @@ namespace CleanRepo
             string linkRegEx = tocFile.Extension.ToLower() == ".yml" ? @"href: (.)*" + linkedFile.Name : @"]\((?!http)([^\)])*" + linkedFile.Name + @"\)";
 
             // For each link that contains the file name...
-            foreach (Match match in Regex.Matches(text, linkRegEx))
+            foreach (Match match in Regex.Matches(text, linkRegEx, RegexOptions.IgnoreCase))
             {
                 // Get the file-relative path to the linked file.
                 string relativePath = GetFilePathFromLink(match.Groups[0].Value);
@@ -571,7 +571,7 @@ namespace CleanRepo
                 string linkRegEx = linkingFile.Extension.ToLower() == ".yml" ? @"href: (.)*\.md" : @"]\((?!http)([^\)])*\.md\)";
 
                 // For each link in the file...
-                foreach (Match match in Regex.Matches(text, linkRegEx))
+                foreach (Match match in Regex.Matches(text, linkRegEx, RegexOptions.IgnoreCase))
                 {
                     // Get the file-relative path to the linked file.
                     string relativePath = GetFilePathFromLink(match.Groups[0].Value);
