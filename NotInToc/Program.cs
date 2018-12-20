@@ -118,9 +118,9 @@ namespace NotInToc
 
                     // Check all links, including in toc.yml, to files in the redirects list.
                     // Output the files that contain links to redirected topics, as well as the bad links.
-                    ListRedirectLinks(redirects, linkingFiles, options.ReplaceLinks);
+                    FindRedirectLinks(redirects, linkingFiles, options.ReplaceLinks);
 
-                    Console.WriteLine("\nDONE");
+                    Console.WriteLine("DONE");
                 }
 
                 // Uncomment for debugging to see console output.
@@ -474,6 +474,75 @@ namespace NotInToc
                     Console.WriteLine($"\nRedirected file '{redirect.source_path}' is backlinked from the following files:\n");
                     Console.Write(backlinks.ToString());
                     Console.WriteLine();
+                }
+            }
+        }
+
+        private static void FindRedirectLinks(List<Redirect> redirects, List<FileInfo> linkingFiles, bool replaceLinks)
+        {
+            Dictionary<string, Redirect> redirectLookup = Enumerable.ToDictionary<Redirect, string>(redirects, r => r.source_path);
+
+            // For each file...
+            foreach (var linkingFile in linkingFiles)
+            {
+                bool foundOldLink = false;
+                StringBuilder output = new StringBuilder($"FILE '{linkingFile.FullName}' contains the following link(s) to redirected files:\n\n");
+
+                string text = File.ReadAllText(linkingFile.FullName);
+
+                string linkRegEx = linkingFile.Extension.ToLower() == "yml" ? @"href: (.)*.md" : @"]\((?!http)([^\)])*\.md\)";
+
+                // For each link in the file...
+                foreach (Match match in Regex.Matches(text, linkRegEx))
+                {
+                    // Get the file-relative path to the linked file.
+                    string relativePath = GetFilePathFromLink(match.Groups[0].Value);
+
+                    if (relativePath is null)
+                    {
+                        Console.WriteLine($"Found a possibly malformed link '{match.Groups[0].Value}' in '{linkingFile.FullName}'.");
+                        break;
+                    }
+
+                    // Construct the full path to the linked file.
+                    string fullPath = Path.Combine(linkingFile.DirectoryName, relativePath);
+                    // Clean up the path by replacing forward slashes with back slashes, removing extra dots, etc.
+                    try
+                    {
+                        fullPath = Path.GetFullPath(fullPath);
+                    }
+                    catch (NotSupportedException)
+                    {
+                        Console.WriteLine($"Found a possibly malformed link '{match.Groups[0].Value}' in '{linkingFile.FullName}'.");
+                        break;
+                    }
+
+                    if (fullPath != null)
+                    {
+                        // See if our constructed path matches a source file in the dictionary of redirects.
+                        if (redirectLookup.ContainsKey(fullPath))
+                        {
+                            foundOldLink = true;
+                            output.AppendLine($"'{relativePath}'");
+
+                            // Replace the link if requested.
+                            if (replaceLinks)
+                            {
+                                string redirectURL = redirectLookup[fullPath].redirect_url;
+
+                                output.AppendLine($"REPLACING '{relativePath}' with '{redirectURL}'.");
+
+                                string newText = text.Replace(relativePath, redirectURL);
+                                File.WriteAllText(linkingFile.FullName, newText);
+                            }
+                        }
+
+                    }
+                }
+
+                if (foundOldLink)
+                {
+                    Console.WriteLine(output.ToString());
                 }
             }
         }
