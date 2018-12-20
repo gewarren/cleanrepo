@@ -28,14 +28,14 @@ namespace CleanRepo
                 // Verify that the input directory exists.
                 if (!Directory.Exists(options.InputDirectory))
                 {
-                    Console.WriteLine($"\nDirectory {options.InputDirectory} does not exist.");
+                    Console.WriteLine($"\nDirectory '{options.InputDirectory}' does not exist.");
                     return;
                 }
 
                 // Find orphaned topics
                 if (options.FindOrphanedTopics)
                 {
-                    Console.WriteLine($"\nSearching the {options.InputDirectory} directory and its subdirectories for orphaned topics.");
+                    Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory and its subdirectories for orphaned topics.");
 
                     List<FileInfo> tocFiles = GetTocFiles(options.InputDirectory);
                     List<FileInfo> markdownFiles = GetMarkdownFiles(options.InputDirectory, options.SearchRecursively);
@@ -45,8 +45,8 @@ namespace CleanRepo
                 // Find topics referenced multiple times
                 else if (options.FindMultiples)
                 {
-                    Console.WriteLine($"\nSearching the {options.InputDirectory} directory and its subdirectories for " +
-                        $"topics that appear more than once in one or more TOC.md files.");
+                    Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory and its subdirectories for " +
+                        $"topics that appear more than once in one or more TOC files.\n");
 
                     List<FileInfo> tocFiles = GetTocFiles(options.InputDirectory);
                     List<FileInfo> markdownFiles = GetMarkdownFiles(options.InputDirectory, options.SearchRecursively);
@@ -56,7 +56,7 @@ namespace CleanRepo
                 // Find orphaned images
                 else if (options.FindOrphanedImages)
                 {
-                    Console.WriteLine($"\nSearching the {options.InputDirectory} directory for orphaned .png files.\n");
+                    Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory for orphaned .png files.\n");
 
                     Dictionary<string, int> imageFiles = GetMediaFiles(options.InputDirectory, options.SearchRecursively);
 
@@ -76,7 +76,7 @@ namespace CleanRepo
                         return;
                     }
 
-                    Console.WriteLine($"\nSearching the {options.InputDirectory} directory for orphaned INCLUDE .md files.\n");
+                    Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory for orphaned INCLUDE .md files.\n");
 
                     Dictionary<string, int> includeFiles = GetIncludeFiles(options.InputDirectory, options.SearchRecursively);
 
@@ -91,14 +91,14 @@ namespace CleanRepo
                 // Find links to topics in the central redirect file
                 else if (options.FindRedirectedTopicLinks)
                 {
-                    Console.WriteLine($"\nSearching the {options.InputDirectory} directory for links to redirected topics.\n");
+                    Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory for links to redirected topics.\n");
 
                     // Find the .openpublishing.redirection.json file for the directory
                     FileInfo redirectsFile = GetRedirectsFile(options.InputDirectory);
 
                     if (redirectsFile == null)
                     {
-                        Console.WriteLine($"Could not find redirects file for directory {options.InputDirectory}");
+                        Console.WriteLine($"Could not find redirects file for directory '{options.InputDirectory}'.");
                         return;
                     }
 
@@ -124,6 +124,11 @@ namespace CleanRepo
         }
 
         #region Orphaned includes
+        /// TODO: Improve the perf of this method using the following pseudo code:
+        /// For each include file
+        ///    For each markdown file
+        ///       Do a RegEx search for the include file
+        ///          If found, BREAK to the next include file
         private static void ListOrphanedIncludes(string inputDirectory, Dictionary<string, int> includeFiles, bool verbose, bool deleteOrphanedIncludes)
         {
             // Get all files that could possibly link to the include files
@@ -222,9 +227,14 @@ namespace CleanRepo
         #region Orphaned images
         /// <summary>
         /// If any of the input image files are not
-        /// referenced from a markdown (.md) file anywhere in the directory structure, including up the directory 
+        /// referenced from a markdown (.md) file anywhere in the docset, including up the directory 
         /// until the docfx.json file is found, the file path of those files is written to the console.
         /// </summary>
+        /// TODO: Improve the perf of this method using the following pseudo code:
+        /// For each image
+        ///    For each markdown file
+        ///       Do a RegEx search for the image
+        ///          If found, BREAK to the next image
         private static void ListOrphanedImages(string inputDirectory, Dictionary<string, int> imageFiles, bool verboseOutput, bool deleteOrphanedImages)
         {
             var files = GetAllMarkdownFiles(inputDirectory);
@@ -240,8 +250,10 @@ namespace CleanRepo
                     // This includes links that don't start with ! for images that are referenced as a hyperlink
                     // instead of an image to display.
 
+                    //string linkRegEx = linkingFile.Extension.ToLower() == ".yml" ? @"href: (.)*\.md" : @"]\((?!http)([^\)])*\.md\)";
+
                     // RegEx pattern to match
-                    string imageLinkPattern = @"\]\(([^\)]*?)" + mediaDirectoryName + @"\/(.*?)\)";
+                    string imageLinkPattern = @"\]\(([^\)])*\.png\)";
 
                     // There could be more than one image reference on the line, hence the foreach loop.
                     foreach (Match match in Regex.Matches(line, imageLinkPattern))
@@ -375,7 +387,7 @@ namespace CleanRepo
 
                 foreach (var tocFile in tocFiles)
                 {
-                    if (!IsFileLinkedInFile2(markdownFile, tocFile))
+                    if (!IsFileLinkedFromTocFile(markdownFile, tocFile))
                     {
                         continue;
                     }
@@ -402,12 +414,11 @@ namespace CleanRepo
             Console.Write(sb.ToString());
         }
 
-        private static bool IsFileLinkedInFile2(FileInfo linkedFile, FileInfo linkingFile)
+        private static bool IsFileLinkedFromTocFile(FileInfo linkedFile, FileInfo tocFile)
         {
-            // TEMP: linkingFile is a toc file of some kind.
-            string text = File.ReadAllText(linkingFile.FullName);
+            string text = File.ReadAllText(tocFile.FullName);
 
-            string linkRegEx = linkingFile.Extension.ToLower() == ".yml" ? @"href: (.)*" + linkedFile.Name : @"]\((?!http)([^\)])*" + linkedFile.Name + @"\)";
+            string linkRegEx = tocFile.Extension.ToLower() == ".yml" ? @"href: (.)*" + linkedFile.Name : @"]\((?!http)([^\)])*" + linkedFile.Name + @"\)";
 
             // For each link that contains the file name...
             foreach (Match match in Regex.Matches(text, linkRegEx))
@@ -418,7 +429,7 @@ namespace CleanRepo
                 if (relativePath != null)
                 {
                     // Construct the full path to the referenced file
-                    string fullPath = Path.Combine(linkingFile.DirectoryName, relativePath);
+                    string fullPath = Path.Combine(tocFile.DirectoryName, relativePath);
                     // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
                     fullPath = Path.GetFullPath(fullPath);
 
@@ -584,6 +595,9 @@ namespace CleanRepo
         /// </summary>
         private static void ListPopularFiles(List<FileInfo> tocFiles, List<FileInfo> markdownFiles)
         {
+            bool found = false;
+            StringBuilder output = new StringBuilder("The following files appear in more than one TOC file:\n\n");
+
             // Keep a hash table of each topic path with the number of times it's referenced
             Dictionary<string, int> topics = markdownFiles.ToDictionary<FileInfo, string, int>(mf => mf.FullName, mf => 0);
 
@@ -607,8 +621,15 @@ namespace CleanRepo
             {
                 if (topic.Value > 1)
                 {
-                    Console.WriteLine($"Topic '{topic.Key}' appears more than once in a TOC file.");
+                    found = true;
+                    output.AppendLine(topic.Key);
                 }
+            }
+
+            // Only write the StringBuilder to the console if we found a topic referenced from more than one TOC file.
+            if (found)
+            {
+                Console.Write(output.ToString());
             }
         }
         #endregion
