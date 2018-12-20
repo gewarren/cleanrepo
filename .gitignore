@@ -6,3 +6,9 @@
 /NotInToc/bin/Debug
 /NotInToc/obj
 /NotInToc/NotInToc.csproj.user
+/App1
+/Dll1
+/packages
+/NotInToc/bin/Release
+/NotInToc/NotInToc.ruleset
+/NotInToc/CleanRepo.csproj.user
