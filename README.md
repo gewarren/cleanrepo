@@ -5,7 +5,7 @@ This command-line tool helps you find topics that aren't linked from a TOC file.
 ## Usage
 
   -d, --directory            Required. Directory to start search for markdown files, or the media directory to search in for orphaned
-                              .png files, or the directory to search in for orphaned INCLUDE files.
+                             .png files, or the directory to search in for orphaned INCLUDE files.
 
   -o, --orphaned_topics      Use this option to find orphaned topics.
 
@@ -17,8 +17,7 @@ This command-line tool helps you find topics that aren't linked from a TOC file.
 
   -g, --delete               (Default: False) Set to true to delete orphaned markdown or .png files.
 
-  -l, --redirects            Finds backlinks to redirected files in the
-                             specified directory.
+  -l, --redirects            Finds backlinks to redirected files in the specified directory.
 
   -r, --replace_redirects    (Default: False) Set to true to replace links to redirected files with their target URL.
 
@@ -66,7 +65,7 @@ Search recursively for topics that appear more than once in one or more TOC file
 CleanRepo.exe -m -d c:\repos\visualstudio-docs-pr\docs\ide
 ```
 
-## Future functionality ideas
+## Future functionality ideas...
 
 - Given a file name, show the TOC files it is referenced in (although this type of search can easily be done in e.g. VS Code,
   with a search scope of TOC.md files).
