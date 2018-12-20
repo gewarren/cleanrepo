@@ -578,7 +578,7 @@ namespace CleanRepo
 
                     if (relativePath is null)
                     {
-                        Console.WriteLine($"Found a possibly malformed link '{match.Groups[0].Value}' in '{linkingFile.FullName}'.");
+                        Console.WriteLine($"Found a possibly malformed link '{match.Groups[0].Value}' in '{linkingFile.FullName}'.\n");
                         break;
                     }
 
