@@ -12,12 +12,6 @@ namespace CleanRepo
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Globalization", "CA1307:Specify StringComparison", Justification = "Annoying")]
     class Program
     {
-        public Program(string arg1)
-        {
-            throw new InvalidOperationException(nameof(arg1));
-        }
-
-        static StringBuilder SimilarFiles = new StringBuilder();
         static StringBuilder ImagesNotInDictionary = new StringBuilder("\nThe following referenced .png files were not found in our dictionary. " +
             "This can happen if the image is in a parent directory of the input media directory:\n");
         static StringBuilder IncludesNotInDictionary = new StringBuilder("\nThe following referenced INCLUDE files were not found in our dictionary. " +
@@ -46,7 +40,7 @@ namespace CleanRepo
                     List<FileInfo> tocFiles = GetTocFiles(options.InputDirectory);
                     List<FileInfo> markdownFiles = GetMarkdownFiles(options.InputDirectory, options.SearchRecursively);
 
-                    ListOrphanedTopics(tocFiles, markdownFiles, options.Verbose, options.Delete);
+                    ListOrphanedTopics(tocFiles, markdownFiles, options.Delete);
                 }
                 // Find topics referenced multiple times
                 else if (options.FindMultiples)
@@ -365,7 +359,7 @@ namespace CleanRepo
         /// Lists the files that aren't in a TOC.
         /// Optionally, only list files that don't have a redirect_url metadata tag.
         /// </summary>
-        private static void ListOrphanedTopics(List<FileInfo> tocFiles, List<FileInfo> markdownFiles, bool verboseOutput, bool deleteOrphanedTopics)
+        private static void ListOrphanedTopics(List<FileInfo> tocFiles, List<FileInfo> markdownFiles, bool deleteOrphanedTopics)
         {
             int countNotFound = 0;
 
@@ -381,7 +375,7 @@ namespace CleanRepo
 
                 foreach (var tocFile in tocFiles)
                 {
-                    if (!IsFileLinkedInFile(markdownFile, tocFile))
+                    if (!IsFileLinkedInFile2(markdownFile, tocFile))
                     {
                         continue;
                     }
@@ -406,11 +400,45 @@ namespace CleanRepo
 
             sb.AppendLine($"\nFound {countNotFound} total .md files that are not referenced in a TOC.\n");
             Console.Write(sb.ToString());
+        }
 
-            if (verboseOutput)
+        private static bool IsFileLinkedInFile2(FileInfo linkedFile, FileInfo linkingFile)
+        {
+            // TEMP: linkingFile is a toc file of some kind.
+            string text = File.ReadAllText(linkingFile.FullName);
+
+            string linkRegEx = linkingFile.Extension.ToLower() == ".yml" ? @"href: (.)*" + linkedFile.Name : @"]\((?!http)([^\)])*" + linkedFile.Name + @"\)";
+
+            // For each link that contains the file name...
+            foreach (Match match in Regex.Matches(text, linkRegEx))
             {
-                Console.WriteLine("Similar file names:\n" + SimilarFiles.ToString());
+                // Get the file-relative path to the linked file.
+                string relativePath = GetFilePathFromLink(match.Groups[0].Value);
+
+                if (relativePath != null)
+                {
+                    // Construct the full path to the referenced file
+                    string fullPath = Path.Combine(linkingFile.DirectoryName, relativePath);
+                    // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
+                    fullPath = Path.GetFullPath(fullPath);
+
+                    if (fullPath != null)
+                    {
+                        // See if our constructed path matches the actual file we think it is
+                        if (String.Compare(fullPath, linkedFile.FullName) == 0)
+                        {
+                            return true;
+                        }
+                        else
+                        {
+                            // If we get here, the file name matched but the full path did not.
+                        }
+                    }
+                }
             }
+
+            // We did not find this file linked in the specified file.
+            return false;
         }
         #endregion
 
@@ -492,7 +520,7 @@ namespace CleanRepo
 
                 string text = File.ReadAllText(linkingFile.FullName);
 
-                string linkRegEx = linkingFile.Extension.ToLower() == "yml" ? @"href: (.)*.md" : @"]\((?!http)([^\)])*\.md\)";
+                string linkRegEx = linkingFile.Extension.ToLower() == ".yml" ? @"href: (.)*\.md" : @"]\((?!http)([^\)])*\.md\)";
 
                 // For each link in the file...
                 foreach (Match match in Regex.Matches(text, linkRegEx))
@@ -631,12 +659,6 @@ namespace CleanRepo
                         else
                         {
                             // If we get here, the file name matched but the full path did not.
-
-                            // We expect a lot of index.md names, so no need to spit out all similarities
-                            if (linkedFile.Name != "index.md")
-                            {
-                                SimilarFiles.AppendLine($"File '{linkedFile.FullName}' has same file name as a file in {linkingFile.FullName}: '{line}'");
-                            }
                         }
                     }
                 }
