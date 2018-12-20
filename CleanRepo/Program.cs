@@ -35,7 +35,7 @@ namespace CleanRepo
                 // Find orphaned topics
                 if (options.FindOrphanedTopics)
                 {
-                    Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory and its subdirectories for orphaned topics.");
+                    Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory and its subdirectories for orphaned topics...");
 
                     List<FileInfo> tocFiles = GetTocFiles(options.InputDirectory);
                     List<FileInfo> markdownFiles = GetMarkdownFiles(options.InputDirectory, options.SearchRecursively);
@@ -46,7 +46,7 @@ namespace CleanRepo
                 else if (options.FindMultiples)
                 {
                     Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory and its subdirectories for " +
-                        $"topics that appear more than once in one or more TOC files.\n");
+                        $"topics that appear more than once in one or more TOC files...\n");
 
                     List<FileInfo> tocFiles = GetTocFiles(options.InputDirectory);
                     List<FileInfo> markdownFiles = GetMarkdownFiles(options.InputDirectory, options.SearchRecursively);
@@ -56,7 +56,7 @@ namespace CleanRepo
                 // Find orphaned images
                 else if (options.FindOrphanedImages)
                 {
-                    Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory for orphaned .png files.\n");
+                    Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory for orphaned .png files...\n");
 
                     Dictionary<string, int> imageFiles = GetMediaFiles(options.InputDirectory, options.SearchRecursively);
 
@@ -76,7 +76,7 @@ namespace CleanRepo
                         return;
                     }
 
-                    Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory for orphaned INCLUDE .md files.\n");
+                    Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory for orphaned INCLUDE .md files...\n");
 
                     Dictionary<string, int> includeFiles = GetIncludeFiles(options.InputDirectory, options.SearchRecursively);
 
@@ -91,7 +91,7 @@ namespace CleanRepo
                 // Find links to topics in the central redirect file
                 else if (options.FindRedirectedTopicLinks)
                 {
-                    Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory for links to redirected topics.\n");
+                    Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory for links to redirected topics...\n");
 
                     // Find the .openpublishing.redirection.json file for the directory
                     FileInfo redirectsFile = GetRedirectsFile(options.InputDirectory);
@@ -389,14 +389,16 @@ namespace CleanRepo
         {
             int countNotFound = 0;
 
-            StringBuilder sb = new StringBuilder("\nTopics not in any TOC file:\n");
+            StringBuilder sb = new StringBuilder("\nTopics not in any TOC file:\n\n");
 
             foreach (var markdownFile in markdownFiles)
             {
                 bool found = false;
 
                 // If the file is in the Includes directory, or the file is a TOC itself, ignore it
-                if (markdownFile.FullName.Contains("\\includes\\") || String.Compare(markdownFile.Name, "TOC.md") == 0 || String.Compare(markdownFile.Name, "TOC.yml") == 0)
+                if (markdownFile.FullName.Contains("\\includes\\") 
+                    || String.Compare(markdownFile.Name, "TOC.md", true) == 0 
+                    || String.Compare(markdownFile.Name, "index.md", true) == 0)
                     continue;
 
                 foreach (var tocFile in tocFiles)
