@@ -103,8 +103,12 @@ namespace CleanRepo
                     }
 
                     // Put all the redirected files in a list
-                    List<Redirect> redirects;
-                    GetAllRedirectedFiles(redirectsFile, out redirects);
+                    List<Redirect> redirects = GetAllRedirectedFiles(redirectsFile);
+                    if (redirects is null)
+                    {
+                        Console.WriteLine("\nDid not find any redirects - exiting.");
+                        return;
+                    }
 
                     // Get all the markdown and YAML files.
                     List<FileInfo> linkingFiles = GetMarkdownFiles(options.InputDirectory, options.SearchRecursively);
@@ -396,8 +400,8 @@ namespace CleanRepo
                 bool found = false;
 
                 // If the file is in the Includes directory, or the file is a TOC itself, ignore it
-                if (markdownFile.FullName.Contains("\\includes\\") 
-                    || String.Compare(markdownFile.Name, "TOC.md", true) == 0 
+                if (markdownFile.FullName.Contains("\\includes\\")
+                    || String.Compare(markdownFile.Name, "TOC.md", true) == 0
                     || String.Compare(markdownFile.Name, "index.md", true) == 0)
                     continue;
 
@@ -509,16 +513,30 @@ namespace CleanRepo
                 string json = reader.ReadToEnd();
 
                 // Trim the string so we're just left with an array of redirect objects
+                json = json.Trim();
                 json = json.Substring(json.IndexOf('['));
                 json = json.TrimEnd('}');
 
-                return JsonConvert.DeserializeObject<List<Redirect>>(json);
+                try
+                {
+                    return JsonConvert.DeserializeObject<List<Redirect>>(json);
+                }
+                catch (JsonReaderException e)
+                {
+                    Console.WriteLine($"Caught exception while reading JSON file: {e.Message}");
+                    return null;
+                }
             }
         }
 
-        private static void GetAllRedirectedFiles(FileInfo redirectsFile, out List<Redirect> redirects)
+        private static List<Redirect> GetAllRedirectedFiles(FileInfo redirectsFile)
         {
-            redirects = LoadRedirectJson(redirectsFile);
+            List<Redirect> redirects = LoadRedirectJson(redirectsFile);
+
+            if (redirects is null)
+            {
+                return null;
+            }
 
             foreach (Redirect redirect in redirects)
             {
@@ -533,6 +551,8 @@ namespace CleanRepo
                     redirect.source_path = fullPath;
                 }
             }
+
+            return redirects;
         }
 
         private static void FindRedirectLinks(List<Redirect> redirects, List<FileInfo> linkingFiles, bool replaceLinks)
