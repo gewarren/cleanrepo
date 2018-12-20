@@ -117,7 +117,7 @@ namespace NotInToc
                     linkingFiles.AddRange(GetYAMLFiles(options.InputDirectory, options.SearchRecursively));
 
                     // Check all links, including in toc.yml, to files in the redirects list.
-                    // Output the files that contain links to redirected topics, as well as the bad links.
+                    // Report links to redirected files and optionally replace them.
                     FindRedirectLinks(redirects, linkingFiles, options.ReplaceLinks);
 
                     Console.WriteLine("DONE");
@@ -422,6 +422,31 @@ namespace NotInToc
             public bool redirect_document_id;
         }
 
+        private static FileInfo GetRedirectsFile(string inputDirectory)
+        {
+            DirectoryInfo dir = new DirectoryInfo(inputDirectory);
+
+            try
+            {
+                FileInfo[] files = dir.GetFiles(".openpublishing.redirection.json", SearchOption.TopDirectoryOnly);
+                while (dir.GetFiles(".openpublishing.redirection.json", SearchOption.TopDirectoryOnly).Length == 0)
+                {
+                    dir = dir.Parent;
+
+                    // Loop exit condition.
+                    if (dir == dir.Root)
+                        return null;
+                }
+
+                return dir.GetFiles(".openpublishing.redirection.json", SearchOption.TopDirectoryOnly)[0];
+            }
+            catch (DirectoryNotFoundException)
+            {
+                Console.WriteLine($"Could not find directory {dir.FullName}");
+                throw;
+            }
+        }
+
         private static List<Redirect> LoadRedirectJson(FileInfo redirectsFile)
         {
             using (StreamReader reader = new StreamReader(redirectsFile.FullName))
@@ -451,29 +476,6 @@ namespace NotInToc
                     fullPath = Path.GetFullPath(fullPath);
 
                     redirect.source_path = fullPath;
-                }
-            }
-        }
-
-        private static void ListRedirectLinks(List<Redirect> redirects, List<FileInfo> linkingFiles, bool replaceLinks)
-        {
-            foreach (Redirect redirect in redirects)
-            {
-                StringBuilder backlinks = new StringBuilder();
-
-                foreach (var linkingFile in linkingFiles)
-                {
-                    if (IsRedirectedFileLinkedFromFile(redirect, linkingFile, replaceLinks))
-                    {
-                        backlinks.AppendLine(linkingFile.FullName);
-                    }
-                }
-
-                if (backlinks.Length > 0)
-                {
-                    Console.WriteLine($"\nRedirected file '{redirect.source_path}' is backlinked from the following files:\n");
-                    Console.Write(backlinks.ToString());
-                    Console.WriteLine();
                 }
             }
         }
@@ -544,106 +546,6 @@ namespace NotInToc
                 {
                     Console.WriteLine(output.ToString());
                 }
-            }
-        }
-
-        /// <summary>
-        /// Checks if the specified file path is referenced in the specified file.
-        /// Optionally replaces the link with a different URL.
-        /// </summary>
-        private static bool IsRedirectedFileLinkedFromFile(Redirect redirect, FileInfo linkingFile, bool replaceLink)
-        {
-            FileInfo redirectedFile = new FileInfo(redirect.source_path);
-
-            bool foundLink = false;
-            string relativePath = null;
-
-            foreach (string line in File.ReadAllLines(linkingFile.FullName))
-            {
-                relativePath = null;
-
-                if (line.Contains("](")) // Markdown style link
-                {
-                    // If the file name is somewhere in the line of text...
-                    if (line.Contains("(" + redirectedFile.Name) || line.Contains("/" + redirectedFile.Name))
-                    {
-                        // Now verify the file path to ensure we're talking about the same file
-                        relativePath = GetFilePathFromLink(line);
-                    }
-                }
-                else if (line.Contains("href:")) // YAML style link
-                {
-                    // If the file name is somewhere in the line of text...
-                    if (line.Contains(redirectedFile.Name))
-                    {
-                        // Now verify the file path to ensure we're talking about the same file
-                        relativePath = GetFilePathFromLink(line);
-                    }
-                }
-
-                if (relativePath != null)
-                {
-                    // Construct the full path to the referenced file
-                    string fullPath = Path.Combine(linkingFile.DirectoryName, relativePath);
-
-                    // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
-                    fullPath = Path.GetFullPath(fullPath);
-                    if (fullPath != null)
-                    {
-                        // See if our constructed path matches the actual file we think it is
-                        if (String.Compare(fullPath, redirectedFile.FullName) == 0)
-                        {
-                            foundLink = true;
-                            break;
-                        }
-                        else
-                        {
-                            // If we get here, the file name matched but the full path did not.
-
-                            // We expect a lot of index.md names, so no need to spit out all similarities
-                            if (redirectedFile.Name != "index.md")
-                            {
-                                SimilarFiles.AppendLine($"File '{redirectedFile.FullName}' has same file name as a file in {linkingFile.FullName}: '{line}'");
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (foundLink && replaceLink)
-            {
-                Console.WriteLine($"Replacing '{relativePath}' with '{redirect.redirect_url}' in '{linkingFile.Name}'.");
-
-                string str = File.ReadAllText(linkingFile.FullName);
-                str = str.Replace(relativePath, redirect.redirect_url);
-                File.WriteAllText(linkingFile.FullName, str);
-            }
-
-            return foundLink;
-        }
-
-        private static FileInfo GetRedirectsFile(string inputDirectory)
-        {
-            DirectoryInfo dir = new DirectoryInfo(inputDirectory);
-
-            try
-            {
-                FileInfo[] files = dir.GetFiles(".openpublishing.redirection.json", SearchOption.TopDirectoryOnly);
-                while (dir.GetFiles(".openpublishing.redirection.json", SearchOption.TopDirectoryOnly).Length == 0)
-                {
-                    dir = dir.Parent;
-
-                    // Loop exit condition.
-                    if (dir == dir.Root)
-                        return null;
-                }
-
-                return dir.GetFiles(".openpublishing.redirection.json", SearchOption.TopDirectoryOnly)[0];
-            }
-            catch (DirectoryNotFoundException)
-            {
-                Console.WriteLine($"Could not find directory {dir.FullName}");
-                throw;
             }
         }
         #endregion
