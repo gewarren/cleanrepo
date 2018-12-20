@@ -3,12 +3,12 @@
 ################################################################################
 
 /.vs
-/NotInToc/bin/Debug
-/NotInToc/obj
-/NotInToc/NotInToc.csproj.user
-/App1
-/Dll1
+/CleanRepo.sln
+/CleanRepo/bin/Debug
+/CleanRepo/obj
+/CleanRepo/CleanRepo.csproj.user
 /packages
-/NotInToc/bin/Release
-/NotInToc/NotInToc.ruleset
-/NotInToc/CleanRepo.csproj.user
+/CleanRepo/bin/Release
+/CleanRepo/CleanRepo.ruleset
+/CleanRepo/CleanRepo.csproj.user
+/CleanRepo/CleanRepo.sln
