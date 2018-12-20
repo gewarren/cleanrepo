@@ -1,6 +1,6 @@
-# not-in-toc
+# CleanRepo
 
-This tool helps you find topics that aren't linked from a TOC file, orphaned .png files, and orphaned .md files in an 'includes' directory. It can also find (and optionally replace) links to redirected files.
+This command-line tool helps you find topics that aren't linked from a TOC file. It can also find, and optionally delete, orphaned .png files and orphaned .md files in an 'includes' directory. It can also find, and optionally replace, links to redirected files.
 
 ## Usage
 
@@ -33,37 +33,37 @@ This tool helps you find topics that aren't linked from a TOC file, orphaned .pn
 Find orphaned topics recursively:
 
 ```
-NotInToc.exe -o -d c:\repos\visualstudio-docs-pr\docs\ide
+CleanRepo.exe -o -d c:\repos\visualstudio-docs-pr\docs\ide
 ```
 
 Find orphaned topics non-recursively:
 
 ```
-NotInToc.exe -o -s false -d c:\repos\visualstudio-docs-pr\docs\ide
+CleanRepo.exe -o -s false -d c:\repos\visualstudio-docs-pr\docs\ide
 ```
 
 Find orphaned .png files (recursive):
 
 ```
-NotInToc.exe -p -d c:\repos\visualstudio-docs-pr\docs\ide\media
+CleanRepo.exe -p -d c:\repos\visualstudio-docs-pr\docs\ide\media
 ```
 
 Find and delete orphaned INCLUDE files (recursive):
 
 ```
-NotInToc.exe -i -g -d c:\repos\visualstudio-docs-pr\docs\ide\includes
+CleanRepo.exe -i -g -d c:\repos\visualstudio-docs-pr\docs\ide\includes
 ```
 
 Find topics with backlinks to redirected topics:
 
 ```
-NotInToc.exe -l -d c:\repos\visualstudio-docs-pr\docs\ide
+CleanRepo.exe -l -d c:\repos\visualstudio-docs-pr\docs\ide
 ```
 
 Search recursively for topics that appear more than once in one or more TOC files:
 
 ```
-NotInToc.exe -m -d c:\repos\visualstudio-docs-pr\docs\ide
+CleanRepo.exe -m -d c:\repos\visualstudio-docs-pr\docs\ide
 ```
 
 ## Future functionality ideas
