@@ -268,13 +268,11 @@ namespace CleanRepo
                     // This includes links that don't start with ! for images that are referenced as a hyperlink
                     // instead of an image to display.
 
-                    //string linkRegEx = linkingFile.Extension.ToLower() == ".yml" ? @"href: (.)*\.md" : @"]\((?!http)([^\)])*\.md\)";
-
                     // RegEx pattern to match
-                    string imageLinkPattern = @"\]\(([^\)])*\.png([^\)])*\)";
+                    string mdImageRegEx = @"\]\(([^\)])*\.png([^\)])*\)";
 
                     // There could be more than one image reference on the line, hence the foreach loop.
-                    foreach (Match match in Regex.Matches(line, imageLinkPattern, RegexOptions.IgnoreCase))
+                    foreach (Match match in Regex.Matches(line, mdImageRegEx, RegexOptions.IgnoreCase))
                     {
                         string relativePath = GetFilePathFromLink(match.Groups[0].Value);
 
@@ -302,9 +300,12 @@ namespace CleanRepo
                     }
 
                     // Match "img src=" references
-                    if (line.Contains("<img src="))
+                    // Example: <img data-hoverimage="./images/getstarted.svg" src="./images/getstarted.png" alt="Get started icon" />
+
+                    string htmlImageRegEx = @"<img([^>])*src([^>])*>";
+                    foreach (Match match in Regex.Matches(line, htmlImageRegEx, RegexOptions.IgnoreCase))
                     {
-                        string relativePath = GetFilePathFromLink(line);
+                        string relativePath = GetFilePathFromLink(match.Groups[0].Value);
 
                         if (relativePath != null)
                         {
@@ -792,9 +793,9 @@ namespace CleanRepo
 
                 return text;
             }
-            else if (text.Contains("img src="))
+            else if (text.Contains("src="))
             {
-                text = text.Substring(text.IndexOf("img src=") + 8);
+                text = text.Substring(text.IndexOf("src=") + 4);
 
                 // Remove opening quotation marks, if present.
                 text = text.TrimStart('"');
