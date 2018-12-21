@@ -12,11 +12,6 @@ namespace CleanRepo
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Globalization", "CA1307:Specify StringComparison", Justification = "Annoying")]
     class Program
     {
-        static StringBuilder ImagesNotInDictionary = new StringBuilder("\nThe following referenced .png files were not found in our dictionary. " +
-            "This can happen if the image is in a parent directory of the input media directory:\n");
-        static StringBuilder IncludesNotInDictionary = new StringBuilder("\nThe following referenced INCLUDE files were not found in our dictionary. " +
-            "This can happen if the INCLUDE file is in a parent directory of the input 'includes' directory:\n");
-
         static void Main(string[] args)
         {
             // Command line options
@@ -56,7 +51,8 @@ namespace CleanRepo
                 // Find orphaned images
                 else if (options.FindOrphanedImages)
                 {
-                    Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory for orphaned .png files...\n");
+                    string recursive = options.SearchRecursively ? "recursively " : "";
+                    Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory {recursive}for orphaned .png files...\n");
 
                     Dictionary<string, int> imageFiles = GetMediaFiles(options.InputDirectory, options.SearchRecursively);
 
@@ -66,27 +62,24 @@ namespace CleanRepo
                         return;
                     }
 
-                    ListOrphanedImages(options.InputDirectory, imageFiles, options.Verbose, options.Delete);
+                    ListOrphanedImages(options.InputDirectory, imageFiles, options.Delete);
                 }
+                // Find orphaned include-type files
                 else if (options.FindOrphanedIncludes)
                 {
-                    if (String.Compare(Path.GetFileName(options.InputDirectory), "includes", true) != 0)
-                    {
-                        Console.WriteLine("\nIncludes directory is not named 'includes'. Program assumes you entered the wrong directory and is exiting.");
-                        return;
-                    }
-
-                    Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory for orphaned INCLUDE .md files...\n");
+                    string recursive = options.SearchRecursively ? "recursively " : "";
+                    Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory {recursive}for orphaned .md files " +
+                        $"in directories named 'includes' or '_shared'.");
 
                     Dictionary<string, int> includeFiles = GetIncludeFiles(options.InputDirectory, options.SearchRecursively);
 
                     if (includeFiles.Count == 0)
                     {
-                        Console.WriteLine("\nNo .md INCLUDE files were found!");
+                        Console.WriteLine("\nNo .md files were found in any directory named 'includes' or '_shared'.");
                         return;
                     }
 
-                    ListOrphanedIncludes(options.InputDirectory, includeFiles, options.Verbose, options.Delete);
+                    ListOrphanedIncludes(options.InputDirectory, includeFiles, options.Delete);
                 }
                 // Find links to topics in the central redirect file
                 else if (options.FindRedirectedTopicLinks)
@@ -133,7 +126,7 @@ namespace CleanRepo
         ///    For each markdown file
         ///       Do a RegEx search for the include file
         ///          If found, BREAK to the next include file
-        private static void ListOrphanedIncludes(string inputDirectory, Dictionary<string, int> includeFiles, bool verbose, bool deleteOrphanedIncludes)
+        private static void ListOrphanedIncludes(string inputDirectory, Dictionary<string, int> includeFiles, bool deleteOrphanedIncludes)
         {
             DirectoryInfo rootDirectory = null;
 
@@ -148,9 +141,10 @@ namespace CleanRepo
                     // Example include references:
                     // [!INCLUDE [DotNet Restore Note](../includes/dotnet-restore-note.md)]
                     // [!INCLUDE[DotNet Restore Note](~/includes/dotnet-restore-note.md)]
+                    // [!INCLUDE [temp](../_shared/assign-to-sprint.md)]
 
                     // RegEx pattern to match
-                    string includeLinkPattern = @"\[!INCLUDE[ ]?\[([^\]]*?)\]\(([^\)]*?)includes\/(.*?).md[ ]*\)[ ]*\]";
+                    string includeLinkPattern = @"\[!INCLUDE[ ]?\[([^\]]*?)\]\(([^\)]*?)(includes|_shared)\/(.*?).md[ ]*\)[ ]*\]";
 
                     // There could be more than one INCLUDE reference on the line, hence the foreach loop.
                     foreach (Match match in Regex.Matches(line, includeLinkPattern, RegexOptions.IgnoreCase))
@@ -184,7 +178,7 @@ namespace CleanRepo
                                 }
                                 catch (KeyNotFoundException)
                                 {
-                                    IncludesNotInDictionary.AppendLine(fullPath);
+                                    // No need to do anything.
                                 }
                             }
                         }
@@ -192,38 +186,43 @@ namespace CleanRepo
                 }
             }
 
+            int count = 0;
+
             // Print out the INCLUDE files that have zero references.
-            Console.WriteLine("The following INCLUDE files are not referenced from any .md file:\n");
+            StringBuilder output = new StringBuilder();
             foreach (var includeFile in includeFiles)
             {
                 if (includeFile.Value == 0)
                 {
-                    Console.WriteLine(Path.GetFullPath(includeFile.Key));
+                    count++;
+                    output.AppendLine(Path.GetFullPath(includeFile.Key));
                 }
-            }
-
-            if (verbose)
-            {
-                // This is FYI-only info for the user.
-                Console.WriteLine(IncludesNotInDictionary.ToString());
             }
 
             if (deleteOrphanedIncludes)
             {
-                Console.WriteLine("\nDeleting orphaned INCLUDE files...\n");
-
                 // Delete orphaned image files
                 foreach (var includeFile in includeFiles)
                 {
                     if (includeFile.Value == 0)
                     {
-                        Console.WriteLine($"Deleting {includeFile.Key}.");
                         File.Delete(includeFile.Key);
                     }
                 }
             }
+
+            string deleted = deleteOrphanedIncludes ? "and deleted " : "";
+
+            Console.WriteLine($"\nFound {deleted}{count} orphaned INCLUDE files:\n");
+            Console.WriteLine(output.ToString());
+            Console.WriteLine("DONE");
         }
 
+        /// <summary>
+        /// Returns a collection of *.md files in the current directory, and optionally subdirectories,
+        /// if the directory name is 'includes' or '_shared'.
+        /// </summary>
+        /// <returns></returns>
         private static Dictionary<string, int> GetIncludeFiles(string inputDirectory, bool searchRecursively)
         {
             DirectoryInfo dir = new DirectoryInfo(inputDirectory);
@@ -232,9 +231,32 @@ namespace CleanRepo
 
             Dictionary<string, int> includeFiles = new Dictionary<string, int>();
 
-            foreach (var file in dir.EnumerateFiles("*.md", searchOption))
+            if (String.Compare(dir.Name, "includes", true) == 0
+                || String.Compare(dir.Name, "_shared", true) == 0)
             {
-                includeFiles.Add(file.FullName.ToLower(), 0);
+                // This is a folder that is likely to contain "include"-type files, i.e. files that aren't in the TOC.
+
+                foreach (var file in dir.EnumerateFiles("*.md"))
+                {
+                    includeFiles.Add(file.FullName.ToLower(), 0);
+                }
+            }
+
+            if (searchOption == SearchOption.AllDirectories)
+            {
+                foreach (var subDirectory in dir.EnumerateDirectories("*", SearchOption.AllDirectories))
+                {
+                    if (String.Compare(subDirectory.Name, "includes", true) == 0
+                        || String.Compare(subDirectory.Name, "_shared", true) == 0)
+                    {
+                        // This is a folder that is likely to contain "include"-type files, i.e. files that aren't in the TOC.
+
+                        foreach (var file in subDirectory.EnumerateFiles("*.md"))
+                        {
+                            includeFiles.Add(file.FullName.ToLower(), 0);
+                        }
+                    }
+                }
             }
 
             return includeFiles;
@@ -252,7 +274,7 @@ namespace CleanRepo
         ///    For each markdown file
         ///       Do a RegEx search for the image
         ///          If found, BREAK to the next image
-        private static void ListOrphanedImages(string inputDirectory, Dictionary<string, int> imageFiles, bool verboseOutput, bool deleteOrphanedImages)
+        private static void ListOrphanedImages(string inputDirectory, Dictionary<string, int> imageFiles, bool deleteOrphanedImages)
         {
             DirectoryInfo rootDirectory = null;
             var files = GetAllMarkdownFiles(inputDirectory, out rootDirectory);
@@ -293,7 +315,7 @@ namespace CleanRepo
                                 }
                                 catch (KeyNotFoundException)
                                 {
-                                    ImagesNotInDictionary.AppendLine(fullPath);
+                                    // No need to do anything.
                                 }
                             }
                         }
@@ -324,7 +346,7 @@ namespace CleanRepo
                                 }
                                 catch (KeyNotFoundException)
                                 {
-                                    ImagesNotInDictionary.AppendLine(fullPath);
+                                    // No need to do anything.
                                 }
                             }
                         }
@@ -340,12 +362,6 @@ namespace CleanRepo
                 {
                     Console.WriteLine(Path.GetFullPath(image.Key));
                 }
-            }
-
-            if (verboseOutput)
-            {
-                // This is FYI-only info for the user.
-                Console.WriteLine(ImagesNotInDictionary.ToString());
             }
 
             if (deleteOrphanedImages)
@@ -401,7 +417,7 @@ namespace CleanRepo
                 bool found = false;
 
                 // If the file is in the Includes directory, or the file is a TOC itself, ignore it
-                if (markdownFile.FullName.Contains("\\includes\\") 
+                if (markdownFile.FullName.Contains("\\includes\\")
                     || markdownFile.FullName.Contains("\\misc\\")
                     || String.Compare(markdownFile.Name, "TOC.md", true) == 0
                     || String.Compare(markdownFile.Name, "index.md", true) == 0)
@@ -592,7 +608,7 @@ namespace CleanRepo
                     }
                     catch (NotSupportedException)
                     {
-                        Console.WriteLine($"Found a possibly malformed link '{match.Groups[0].Value}' in '{linkingFile.FullName}'.");
+                        Console.WriteLine($"Found a possibly malformed link '{match.Groups[0].Value}' in '{linkingFile.FullName}'.\n");
                         break;
                     }
 

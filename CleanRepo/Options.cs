@@ -33,9 +33,6 @@ namespace CleanRepo
         [Option('s', "recursive", DefaultValue = true, Required = false, HelpText = "Search directory and all subdirectories.")]
         public bool SearchRecursively { get; set; }
 
-        [Option('v', "verbose", DefaultValue = false, Required = false, HelpText = "Output verbose results.")]
-        public bool Verbose { get; set; }
-
         [ParserState]
         public IParserState LastParserState { get; set; }
 
