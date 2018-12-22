@@ -434,6 +434,7 @@ namespace CleanRepo
                 // If the file is in the Includes directory, or the file is a TOC itself, ignore it
                 if (markdownFile.FullName.Contains("\\includes\\")
                     || markdownFile.FullName.Contains("\\misc\\")
+                    || markdownFile.FullName.Contains("\\_shared\\")
                     || String.Compare(markdownFile.Name, "TOC.md", true) == 0
                     || String.Compare(markdownFile.Name, "index.md", true) == 0)
                     continue;
