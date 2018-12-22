@@ -4,8 +4,7 @@ This command-line tool helps you find topics that aren't linked from a TOC file.
 
 ## Usage
 
-  -d, --directory            Required. Directory to start search for markdown files, or the media directory to search in for orphaned
-                             .png files, or the directory to search in for orphaned INCLUDE files.
+  -d, --directory            Required. Directory to start search for markdown files, or the media directory to search the search for                                  orphaned .png files, or the directory to start the search for orphaned INCLUDE files.
 
   -o, --orphaned_topics      Use this option to find orphaned topics.
 
@@ -13,7 +12,7 @@ This command-line tool helps you find topics that aren't linked from a TOC file.
 
   -p, --orphaned_images      Use this option to find orphaned .png files.
 
-  -i, --orphaned_includes    Use this option to find orphaned INCLUDE files.
+  -i, --orphaned_includes    Use this option to find orphaned INCLUDE files (looks in folders named 'includes' or '\_shared').
 
   -g, --delete               (Default: False) Set to true to delete orphaned markdown or .png files.
 
@@ -22,8 +21,6 @@ This command-line tool helps you find topics that aren't linked from a TOC file.
   -r, --replace_redirects    (Default: False) Set to true to replace links to redirected files with their target URL.
 
   -s, --recursive            (Default: True) Search directory and all subdirectories.
-
-  -v, --verbose              (Default: False) Output verbose results.
 
   --help                     Display this help screen.
 
@@ -44,19 +41,19 @@ CleanRepo.exe -o -s false -d c:\repos\visualstudio-docs-pr\docs\ide
 Find orphaned .png files (recursive):
 
 ```
-CleanRepo.exe -p -d c:\repos\visualstudio-docs-pr\docs\ide\media
+CleanRepo.exe -p -d c:\repos\visualstudio-docs-pr\docs\ide
 ```
 
 Find and delete orphaned INCLUDE files (recursive):
 
 ```
-CleanRepo.exe -i -g -d c:\repos\visualstudio-docs-pr\docs\ide\includes
+CleanRepo.exe -i -g -d c:\repos\visualstudio-docs-pr\docs\ide
 ```
 
-Find topics with backlinks to redirected topics:
+Find topics with backlinks to redirected topics and replace the links with their target URL:
 
 ```
-CleanRepo.exe -l -d c:\repos\visualstudio-docs-pr\docs\ide
+CleanRepo.exe -l -r -d c:\repos\visualstudio-docs-pr\docs\ide
 ```
 
 Search recursively for topics that appear more than once in one or more TOC files:
