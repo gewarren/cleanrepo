@@ -301,7 +301,16 @@ namespace CleanRepo
                         if (relativePath != null)
                         {
                             // Construct the full path to the referenced image file
-                            string fullPath = Path.Combine(markdownFile.DirectoryName, relativePath);
+                            string fullPath = null;
+                            try
+                            {
+                                fullPath = Path.Combine(markdownFile.DirectoryName, relativePath);
+                            }
+                            catch (ArgumentException)
+                            {
+                                Console.WriteLine($"Possible bad image link '{line}' in file '{markdownFile.FullName}'.\n");
+                                break;
+                            }
 
                             // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
                             fullPath = Path.GetFullPath(fullPath);
@@ -354,30 +363,36 @@ namespace CleanRepo
                 }
             }
 
+            int count = 0;
+
             // Print out the image files with zero references.
-            Console.WriteLine("The following media files are not referenced from any .md file:\n");
+            StringBuilder output = new StringBuilder();
             foreach (var image in imageFiles)
             {
                 if (image.Value == 0)
                 {
-                    Console.WriteLine(Path.GetFullPath(image.Key));
+                    count++;
+                    output.AppendLine(Path.GetFullPath(image.Key));
                 }
             }
 
             if (deleteOrphanedImages)
             {
-                Console.WriteLine("\nDeleting orphaned files...\n");
-
                 // Delete orphaned image files
                 foreach (var image in imageFiles)
                 {
                     if (image.Value == 0)
                     {
-                        Console.WriteLine($"Deleting {image.Key}.");
                         File.Delete(image.Key);
                     }
                 }
             }
+
+            string deleted = deleteOrphanedImages ? "and deleted " : "";
+
+            Console.WriteLine($"\nFound {deleted}{count} orphaned .png files:\n");
+            Console.WriteLine(output.ToString());
+            Console.WriteLine("DONE");
         }
 
         /// <summary>
@@ -782,7 +797,7 @@ namespace CleanRepo
                 catch (ArgumentOutOfRangeException)
                 {
                     // Image link is likely badly formatted.
-                    Console.WriteLine($"Caught ArgumentOutOfRangeException while extracting the image path from the following text: {text}\n");
+                    Console.WriteLine($"Possible malformed image link in '{text}'.\n");
                     return null;
                 }
 
