@@ -431,9 +431,8 @@ namespace CleanRepo
             {
                 bool found = false;
 
-                // If the file is in the Includes directory, or the file is a TOC itself, ignore it
+                // If the file is in the Includes directory, or the file is a TOC or index file, ignore it
                 if (markdownFile.FullName.Contains("\\includes\\")
-                    || markdownFile.FullName.Contains("\\misc\\")
                     || markdownFile.FullName.Contains("\\_shared\\")
                     || String.Compare(markdownFile.Name, "TOC.md", true) == 0
                     || String.Compare(markdownFile.Name, "index.md", true) == 0)
@@ -807,6 +806,12 @@ namespace CleanRepo
                 if (index > 0)
                 {
                     relativePath = relativePath.Substring(0, index);
+                }
+
+                // Handle links with a # sign, e.g. media/how-to-use-lightboxes/xamarin.png#lightbox.
+                if (relativePath.Substring(relativePath.LastIndexOf('/')).Contains("#"))
+                {
+                    relativePath = relativePath.Substring(0, relativePath.LastIndexOf('#'));
                 }
 
                 return relativePath;
