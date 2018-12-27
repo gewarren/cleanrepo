@@ -313,7 +313,15 @@ namespace CleanRepo
                             }
 
                             // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
-                            fullPath = Path.GetFullPath(fullPath);
+                            try
+                            {
+                                fullPath = Path.GetFullPath(fullPath);
+                            }
+                            catch (ArgumentException)
+                            {
+                                Console.WriteLine($"Possible bad image link '{line}' in file '{markdownFile.FullName}'.\n");
+                                break;
+                            }
 
                             if (fullPath != null)
                             {
@@ -801,6 +809,9 @@ namespace CleanRepo
                     return null;
                 }
 
+                // Trim any whitespace on the beginning and end
+                relativePath = relativePath.Trim();
+
                 // If there is a whitespace character in the string, truncate it there.
                 int index = relativePath.IndexOf(' ');
                 if (index > 0)
@@ -809,9 +820,10 @@ namespace CleanRepo
                 }
 
                 // Handle links with a # sign, e.g. media/how-to-use-lightboxes/xamarin.png#lightbox.
-                if (relativePath.Substring(relativePath.LastIndexOf('/')).Contains("#"))
+                int hashIndex = relativePath.LastIndexOf('#');
+                if (hashIndex > 0)
                 {
-                    relativePath = relativePath.Substring(0, relativePath.LastIndexOf('#'));
+                    relativePath = relativePath.Substring(0, hashIndex);
                 }
 
                 return relativePath;
