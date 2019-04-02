@@ -284,8 +284,6 @@ namespace CleanRepo
             {
                 foreach (string line in File.ReadAllLines(markdownFile.FullName))
                 {
-                    string mediaDirectoryName = Path.GetFileName(inputDirectory);
-
                     // Match []() image references where the path to the image file includes the name of the input media directory.
                     // This includes links that don't start with ! for images that are referenced as a hyperlink
                     // instead of an image to display.
@@ -343,6 +341,37 @@ namespace CleanRepo
 
                     string htmlImageRegEx = @"<img([^>])*src([^>])*>";
                     foreach (Match match in Regex.Matches(line, htmlImageRegEx, RegexOptions.IgnoreCase))
+                    {
+                        string relativePath = GetFilePathFromLink(match.Groups[0].Value);
+
+                        if (relativePath != null)
+                        {
+                            // Construct the full path to the referenced image file
+                            string fullPath = Path.Combine(markdownFile.DirectoryName, relativePath);
+
+                            // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
+                            fullPath = Path.GetFullPath(fullPath);
+
+                            if (fullPath != null)
+                            {
+                                // Increment the count for this image file in our dictionary
+                                try
+                                {
+                                    imageFiles[fullPath.ToLower()]++;
+                                }
+                                catch (KeyNotFoundException)
+                                {
+                                    // No need to do anything.
+                                }
+                            }
+                        }
+                    }
+
+                    // Match reference-style image links
+                    // Example: [0]: ../../media/vs-acr-provisioning-dialog-2019.png
+
+                    string referenceLinkRegEx = @"\[(.)*?\]:(.)*?.png";
+                    foreach (Match match in Regex.Matches(line, referenceLinkRegEx, RegexOptions.IgnoreCase))
                     {
                         string relativePath = GetFilePathFromLink(match.Groups[0].Value);
 
@@ -827,6 +856,11 @@ namespace CleanRepo
                 }
 
                 return relativePath;
+            }
+            else if (text.Contains("]:"))
+            {
+                text = text.Substring(text.IndexOf("]:") + 2).Trim();
+                return text;
             }
             else if (text.Contains("href:"))
             {
