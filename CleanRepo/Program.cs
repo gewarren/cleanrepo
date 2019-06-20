@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -469,9 +470,10 @@ namespace CleanRepo
         /// </summary>
         private static void ListOrphanedTopics(List<FileInfo> tocFiles, List<FileInfo> markdownFiles, bool deleteOrphanedTopics)
         {
-            int countNotFound = 0;
+            var countNotFound = 0;
+            var countDeleted = 0;
 
-            StringBuilder output = new StringBuilder("\nTopics not in any TOC file:\n\n");
+            StringBuilder output = new StringBuilder("\nTopic details:\n\n");
 
             foreach (var markdownFile in markdownFiles)
             {
@@ -497,19 +499,43 @@ namespace CleanRepo
 
                 if (!found)
                 {
-                    countNotFound++;
-                    output.AppendLine(markdownFile.FullName);
+                    ++ countNotFound;
 
-                    // Delete the file if the option is set.
+                    // Try to delete the file if the option is set.
                     if (deleteOrphanedTopics)
                     {
-                        output.AppendLine($"DELETING '{markdownFile.FullName}'.");
-                        File.Delete(markdownFile.FullName);
+                        var isLinked = false;
+                        var referencedFile = "";
+                        foreach (var otherMarkdownFile in markdownFiles.Where(file => file != markdownFile))
+                        {
+                            if (!IsFileLinkedInFile(markdownFile, otherMarkdownFile))
+                            {
+                                continue;
+                            }
+
+                            referencedFile = otherMarkdownFile.FullName;
+                            isLinked = true;
+                            break;
+                        }
+
+                        if (isLinked)
+                        {
+                            output.AppendLine($"Unable to delete '{markdownFile.FullName}'");
+                            output.AppendLine($"    It is referenced in '{referencedFile}'");
+                        }
+                        else
+                        {
+                            ++ countDeleted;
+                            output.AppendLine($"Deleting '{markdownFile.FullName}'.");
+
+                            File.Delete(markdownFile.FullName);
+                        }
                     }
                 }
             }
 
-            output.AppendLine($"\nFound {countNotFound} total .md files that are not referenced in a TOC.\n");
+            var deletedMessage = deleteOrphanedTopics ? $"Deleted {countDeleted} of these files." : "";
+            output.AppendLine($"\nFound { countNotFound} .md files that aren't referenced in a TOC. {deletedMessage}\n");
             Console.Write(output.ToString());
         }
 
@@ -755,6 +781,11 @@ namespace CleanRepo
         /// </summary>
         private static bool IsFileLinkedInFile(FileInfo linkedFile, FileInfo linkingFile)
         {
+            if (!File.Exists(linkingFile.FullName))
+            {
+                return false;
+            }
+
             foreach (string line in File.ReadAllLines(linkingFile.FullName))
             {
                 string relativePath = null;
