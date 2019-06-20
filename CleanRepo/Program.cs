@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -471,9 +472,10 @@ namespace CleanRepo
         /// </summary>
         private static void ListOrphanedTopics(List<FileInfo> tocFiles, List<FileInfo> markdownFiles, bool deleteOrphanedTopics)
         {
-            int countNotFound = 0;
+            var countNotFound = 0;
+            var countDeleted = 0;
 
-            StringBuilder output = new StringBuilder("\nTopics not in any TOC file:\n\n");
+            StringBuilder output = new StringBuilder("\nTopic details:\n\n");
 
             foreach (var markdownFile in markdownFiles)
             {
@@ -499,6 +501,8 @@ namespace CleanRepo
 
                 if (!found)
                 {
+                    ++ countNotFound;
+
                     // Try to delete the file if the option is set.
                     if (deleteOrphanedTopics)
                     {
@@ -523,7 +527,7 @@ namespace CleanRepo
                         }
                         else
                         {
-                            ++ countNotFound;
+                            ++ countDeleted;
                             output.AppendLine($"Deleting '{markdownFile.FullName}'.");
 
                             File.Delete(markdownFile.FullName);
@@ -532,8 +536,8 @@ namespace CleanRepo
                 }
             }
 
-            var deleted = deleteOrphanedTopics ? "and deleted " : "";
-            output.AppendLine($"\nFound {deleted}{countNotFound} total .md files that are not referenced in a TOC.\n");
+            var deletedMessage = deleteOrphanedTopics ? $"Deleted {countDeleted} of these files." : "";
+            output.AppendLine($"\nFound { countNotFound} .md files that aren't referenced in a TOC. {deletedMessage}\n");
             Console.Write(output.ToString());
         }
 
