@@ -526,7 +526,7 @@ namespace CleanRepo
                     if (fullPath != null)
                     {
                         // See if our constructed path matches the actual file we think it is
-                        if (String.Compare(fullPath, linkedFile.FullName) == 0)
+                        if (String.Compare(fullPath, linkedFile.FullName, true) == 0)
                         {
                             return true;
                         }
@@ -779,7 +779,7 @@ namespace CleanRepo
                     if (fullPath != null)
                     {
                         // See if our constructed path matches the actual file we think it is
-                        if (String.Compare(fullPath, linkedFile.FullName) == 0)
+                        if (String.Compare(fullPath, linkedFile.FullName, true) == 0)
                         {
                             return true;
                         }
