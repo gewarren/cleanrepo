@@ -428,8 +428,17 @@ namespace CleanRepo
             {
                 return Path.GetFullPath(path);
             }
-            catch
+            catch (Exception ex)
             {
+                if (ex is PathTooLongException)
+                {
+                    Console.WriteLine($"Unable to get full-path, path too long: {path}");
+                }
+                else
+                {
+                    Console.WriteLine($"Unable to get full-path: {ex.Message}");
+                }
+
                 return null;
             }
         }
