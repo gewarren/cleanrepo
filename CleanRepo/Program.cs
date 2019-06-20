@@ -499,19 +499,41 @@ namespace CleanRepo
 
                 if (!found)
                 {
-                    countNotFound++;
-                    output.AppendLine(markdownFile.FullName);
-
-                    // Delete the file if the option is set.
+                    // Try to delete the file if the option is set.
                     if (deleteOrphanedTopics)
                     {
-                        output.AppendLine($"DELETING '{markdownFile.FullName}'.");
-                        File.Delete(markdownFile.FullName);
+                        var isLinked = false;
+                        var referencedFile = "";
+                        foreach (var otherMarkdownFile in markdownFiles.Where(file => file != markdownFile))
+                        {
+                            if (!IsFileLinkedInFile(markdownFile, otherMarkdownFile))
+                            {
+                                continue;
+                            }
+
+                            referencedFile = otherMarkdownFile.FullName;
+                            isLinked = true;
+                            break;
+                        }
+
+                        if (isLinked)
+                        {
+                            output.AppendLine($"Unable to delete '{markdownFile.FullName}'");
+                            output.AppendLine($"    It is referenced in '{referencedFile}'");
+                        }
+                        else
+                        {
+                            ++ countNotFound;
+                            output.AppendLine($"Deleting '{markdownFile.FullName}'.");
+
+                            File.Delete(markdownFile.FullName);
+                        }
                     }
                 }
             }
 
-            output.AppendLine($"\nFound {countNotFound} total .md files that are not referenced in a TOC.\n");
+            var deleted = deleteOrphanedTopics ? "and deleted " : "";
+            output.AppendLine($"\nFound {deleted}{countNotFound} total .md files that are not referenced in a TOC.\n");
             Console.Write(output.ToString());
         }
 
@@ -757,6 +779,11 @@ namespace CleanRepo
         /// </summary>
         private static bool IsFileLinkedInFile(FileInfo linkedFile, FileInfo linkingFile)
         {
+            if (!File.Exists(linkingFile.FullName))
+            {
+                return false;
+            }
+
             foreach (string line in File.ReadAllLines(linkingFile.FullName))
             {
                 string relativePath = null;
