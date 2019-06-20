@@ -128,10 +128,8 @@ namespace CleanRepo
         ///          If found, BREAK to the next include file
         private static void ListOrphanedIncludes(string inputDirectory, Dictionary<string, int> includeFiles, bool deleteOrphanedIncludes)
         {
-            DirectoryInfo rootDirectory = null;
-
             // Get all files that could possibly link to the include files
-            var files = GetAllMarkdownFiles(inputDirectory, out rootDirectory);
+            var files = GetAllMarkdownFiles(inputDirectory, out DirectoryInfo rootDirectory);
 
             // Gather up all the include references and increment the count for that include file in the Dictionary.
             foreach (var markdownFile in files)
@@ -276,13 +274,13 @@ namespace CleanRepo
         ///          If found, BREAK to the next image
         private static void ListOrphanedImages(string inputDirectory, Dictionary<string, int> imageFiles, bool deleteOrphanedImages)
         {
-            var files = GetAllMarkdownFiles(inputDirectory, out _);
+            var files = GetAllMarkdownFiles(inputDirectory, out DirectoryInfo rootDirectory);
 
             void TryIncrementFile(string key, Dictionary<string, int> fileMap)
             {
                 if (fileMap.ContainsKey(key))
                 {
-                    ++ fileMap[key];
+                    ++fileMap[key];
                 }
             }
 
@@ -309,7 +307,15 @@ namespace CleanRepo
                             string fullPath = null;
                             try
                             {
-                                fullPath = Path.Combine(markdownFile.DirectoryName, relativePath);
+                                // Path could start with a tilde e.g. ~/media/pic1.png
+                                if (relativePath.StartsWith("~/"))
+                                {
+                                    fullPath = Path.Combine(rootDirectory.FullName, relativePath.TrimStart('~', '/'));
+                                }
+                                else
+                                {
+                                    fullPath = Path.Combine(markdownFile.DirectoryName, relativePath);
+                                }
                             }
                             catch (ArgumentException)
                             {
@@ -407,9 +413,9 @@ namespace CleanRepo
                         {
                             File.Delete(image.Key);
                         }
-                        catch
+                        catch (PathTooLongException)
                         {
-                            output.AppendLine($"Unable to delete {image.Key}.");
+                            output.AppendLine($"Unable to delete {image.Key} because its path is too long.");
                         }
                     }
                 }
@@ -428,17 +434,9 @@ namespace CleanRepo
             {
                 return Path.GetFullPath(path);
             }
-            catch (Exception ex)
+            catch (PathTooLongException)
             {
-                if (ex is PathTooLongException)
-                {
-                    Console.WriteLine($"Unable to get full-path, path too long: {path}");
-                }
-                else
-                {
-                    Console.WriteLine($"Unable to get full-path: {ex.Message}");
-                }
-
+                Console.WriteLine($"Unable to get path because it's too long: {path}");
                 return null;
             }
         }
