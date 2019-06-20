@@ -276,8 +276,15 @@ namespace CleanRepo
         ///          If found, BREAK to the next image
         private static void ListOrphanedImages(string inputDirectory, Dictionary<string, int> imageFiles, bool deleteOrphanedImages)
         {
-            DirectoryInfo rootDirectory = null;
-            var files = GetAllMarkdownFiles(inputDirectory, out rootDirectory);
+            var files = GetAllMarkdownFiles(inputDirectory, out _);
+
+            void TryIncrementFile(string key, Dictionary<string, int> fileMap)
+            {
+                if (fileMap.ContainsKey(key))
+                {
+                    ++ fileMap[key];
+                }
+            }
 
             // Gather up all the image references and increment the count for that image in the Dictionary.
             foreach (var markdownFile in files)
@@ -323,15 +330,7 @@ namespace CleanRepo
 
                             if (fullPath != null)
                             {
-                                // Increment the count for this image file in our dictionary
-                                try
-                                {
-                                    imageFiles[fullPath.ToLower()]++;
-                                }
-                                catch (KeyNotFoundException)
-                                {
-                                    // No need to do anything.
-                                }
+                                TryIncrementFile(fullPath, imageFiles);
                             }
                         }
                     }
@@ -350,19 +349,11 @@ namespace CleanRepo
                             string fullPath = Path.Combine(markdownFile.DirectoryName, relativePath);
 
                             // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
-                            fullPath = Path.GetFullPath(fullPath);
+                            fullPath = TryGetFullPath(fullPath);
 
                             if (fullPath != null)
                             {
-                                // Increment the count for this image file in our dictionary
-                                try
-                                {
-                                    imageFiles[fullPath.ToLower()]++;
-                                }
-                                catch (KeyNotFoundException)
-                                {
-                                    // No need to do anything.
-                                }
+                                TryIncrementFile(fullPath, imageFiles);
                             }
                         }
                     }
@@ -381,19 +372,11 @@ namespace CleanRepo
                             string fullPath = Path.Combine(markdownFile.DirectoryName, relativePath);
 
                             // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
-                            fullPath = Path.GetFullPath(fullPath);
+                            fullPath = TryGetFullPath(fullPath);
 
                             if (fullPath != null)
                             {
-                                // Increment the count for this image file in our dictionary
-                                try
-                                {
-                                    imageFiles[fullPath.ToLower()]++;
-                                }
-                                catch (KeyNotFoundException)
-                                {
-                                    // No need to do anything.
-                                }
+                                TryIncrementFile(fullPath, imageFiles);
                             }
                         }
                     }
@@ -420,7 +403,14 @@ namespace CleanRepo
                 {
                     if (image.Value == 0)
                     {
-                        File.Delete(image.Key);
+                        try
+                        {
+                            File.Delete(image.Key);
+                        }
+                        catch
+                        {
+                            output.AppendLine($"Unable to delete {image.Key}.");
+                        }
                     }
                 }
             }
@@ -430,6 +420,18 @@ namespace CleanRepo
             Console.WriteLine($"\nFound {deleted}{count} orphaned .png files:\n");
             Console.WriteLine(output.ToString());
             Console.WriteLine("DONE");
+        }
+
+        private static string TryGetFullPath(string path)
+        {
+            try
+            {
+                return Path.GetFullPath(path);
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         /// <summary>
@@ -442,7 +444,7 @@ namespace CleanRepo
 
             SearchOption searchOption = searchRecursively ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
 
-            Dictionary<string, int> mediaFiles = new Dictionary<string, int>();
+            Dictionary<string, int> mediaFiles = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var file in dir.EnumerateFiles("*.png", searchOption))
             {
