@@ -36,6 +36,11 @@ namespace CleanRepo
                     List<FileInfo> tocFiles = GetTocFiles(options.InputDirectory);
                     List<FileInfo> markdownFiles = GetMarkdownFiles(options.InputDirectory, options.SearchRecursively);
 
+                    if (tocFiles is null || markdownFiles is null)
+                    {
+                        return;
+                    }
+
                     ListOrphanedTopics(tocFiles, markdownFiles, options.Delete);
                 }
                 // Find topics referenced multiple times
@@ -46,6 +51,11 @@ namespace CleanRepo
 
                     List<FileInfo> tocFiles = GetTocFiles(options.InputDirectory);
                     List<FileInfo> markdownFiles = GetMarkdownFiles(options.InputDirectory, options.SearchRecursively);
+
+                    if (tocFiles is null || markdownFiles is null)
+                    {
+                        return;
+                    }
 
                     ListPopularFiles(tocFiles, markdownFiles);
                 }
@@ -132,6 +142,11 @@ namespace CleanRepo
             // Get all files that could possibly link to the include files
             var files = GetAllMarkdownFiles(inputDirectory, out DirectoryInfo rootDirectory);
 
+            if (files is null)
+            {
+                return;
+            }
+
             // Gather up all the include references and increment the count for that include file in the Dictionary.
             foreach (var markdownFile in files)
             {
@@ -142,8 +157,11 @@ namespace CleanRepo
                     // [!INCLUDE[DotNet Restore Note](~/includes/dotnet-restore-note.md)]
                     // [!INCLUDE [temp](../_shared/assign-to-sprint.md)]
 
+                    // An include file referenced from another include file won't have "includes" or "_shared" in the path.
+                    // E.g. [!INCLUDE [P2S FAQ All](vpn-gateway-faq-p2s-all-include.md)]
+
                     // RegEx pattern to match
-                    string includeLinkPattern = @"\[!INCLUDE[ ]?\[([^\]]*?)\]\(([^\)]*?)(includes|_shared)\/(.*?).md[ ]*\)[ ]*\]";
+                    string includeLinkPattern = @"\[!INCLUDE[ ]?\[([^\]]*?)\]\((.*?).md[ ]*\)[ ]*\]";
 
                     // There could be more than one INCLUDE reference on the line, hence the foreach loop.
                     foreach (Match match in Regex.Matches(line, includeLinkPattern, RegexOptions.IgnoreCase))
@@ -276,6 +294,11 @@ namespace CleanRepo
         private static void ListOrphanedImages(string inputDirectory, Dictionary<string, int> imageFiles, bool deleteOrphanedImages)
         {
             var files = GetAllMarkdownFiles(inputDirectory, out DirectoryInfo rootDirectory);
+
+            if (files is null)
+            {
+                return;
+            }
 
             void TryIncrementFile(string key, Dictionary<string, int> fileMap)
             {
@@ -845,6 +868,7 @@ namespace CleanRepo
             // Example image references:
             // ![Auto hide](../ide/media/vs2015_auto_hide.png)
             // ![Unit Test Explorer showing Run All button](../test/media/unittestexplorer-beta-.png "UnitTestExplorer(beta)")
+            // ![Architecture](./media/ci-cd-flask/Architecture.PNG?raw=true)
             // ![link to video](../data-tools/media/playvideo.gif "PlayVideo")For a video version of this topic, see...
             // <img src="../data-tools/media/logo_azure-datalake.svg" alt=""
             // The Light Bulb icon ![Small Light Bulb Icon](media/vs2015_lightbulbsmall.png "VS2017_LightBulbSmall"),
@@ -893,6 +917,13 @@ namespace CleanRepo
                 if (hashIndex > 0)
                 {
                     relativePath = relativePath.Substring(0, hashIndex);
+                }
+
+                // Handle links with ?raw=true on the end, for example
+                int pngIndex = relativePath.ToLowerInvariant().LastIndexOf(".png");
+                if (pngIndex > 0 && pngIndex != (relativePath.Length - 4))
+                {
+                    relativePath = relativePath.Substring(0, pngIndex + 4);
                 }
 
                 return relativePath;
@@ -988,6 +1019,9 @@ namespace CleanRepo
             // Look further up the path until we find docfx.json
             rootDirectory = GetDocFxDirectory(new DirectoryInfo(directoryPath));
 
+            if (rootDirectory is null)
+                return null;
+
             return rootDirectory.EnumerateFiles("*.md", SearchOption.AllDirectories).ToList();
         }
 
@@ -1002,6 +1036,9 @@ namespace CleanRepo
 
             // Look further up the path until we find docfx.json
             dir = GetDocFxDirectory(dir);
+
+            if (dir is null)
+                return null;
 
             return dir.EnumerateFiles("TOC.*", SearchOption.AllDirectories).ToList();
         }
@@ -1018,14 +1055,17 @@ namespace CleanRepo
                 {
                     dir = dir.Parent;
 
-                    if (dir == dir.Root)
-                        throw new Exception("Could not find docfx.json file in directory or parent.");
+                    if (dir == dir?.Root)
+                    {
+                        Console.WriteLine($"\nCould not find a directory containing docfx.json.");
+                        return null;
+                    }
                 }
             }
             catch (DirectoryNotFoundException)
             {
-                Console.WriteLine($"Could not find directory {dir.FullName}");
-                throw;
+                Console.WriteLine($"\nCould not find directory {dir.FullName}");
+                return null;
             }
 
             return dir;
