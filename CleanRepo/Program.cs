@@ -391,7 +391,7 @@ namespace CleanRepo
                     // Match reference-style image links
                     // Example: [0]: ../../media/vs-acr-provisioning-dialog-2019.png
 
-                    string referenceLinkRegEx = @"\[(.)*?\]:(.)*?.png";
+                    string referenceLinkRegEx = @"\[(.)*?\]:(.)*?\.png";
                     foreach (Match match in Regex.Matches(line, referenceLinkRegEx, RegexOptions.IgnoreCase))
                     {
                         string relativePath = GetFilePathFromLink(match.Groups[0].Value);
@@ -460,7 +460,7 @@ namespace CleanRepo
             }
             catch (PathTooLongException)
             {
-                Console.WriteLine($"Unable to get path because it's too long: {path}");
+                Console.WriteLine($"Unable to get path because it's too long: {path}\n");
                 return null;
             }
         }
