@@ -951,6 +951,9 @@ namespace CleanRepo
             {
                 text = text.Substring(text.IndexOf("src=") + 4);
 
+                // Trim any preceding spaces e.g. <img src= "./media/running-icon.png">
+                text = text.Trim();
+
                 // Remove opening quotation marks, if present.
                 text = text.TrimStart('"');
 
