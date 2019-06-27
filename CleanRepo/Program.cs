@@ -375,8 +375,19 @@ namespace CleanRepo
 
                         if (relativePath != null)
                         {
-                            // Construct the full path to the referenced image file
-                            string fullPath = Path.Combine(markdownFile.DirectoryName, relativePath);
+                            string fullPath;
+
+                            // Path could start with a tilde e.g. ~/media/pic1.png
+                            if (relativePath.StartsWith("~/"))
+                            {
+                                // Construct the full path to the referenced image file
+                                fullPath = Path.Combine(rootDirectory.FullName, relativePath.TrimStart('~', '/'));
+                            }
+                            else
+                            {
+                                // Construct the full path to the referenced image file
+                                fullPath = Path.Combine(markdownFile.DirectoryName, relativePath);
+                            }
 
                             // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
                             fullPath = TryGetFullPath(fullPath);
@@ -963,9 +974,9 @@ namespace CleanRepo
                     return null;
                 }
 
-                // Check that the path is valid, i.e. it starts with a letter or a '.'.
+                // Check that the path is valid, i.e. it starts with a letter or a '.' or a '~'.
                 // RegEx pattern to match
-                string imageLinkPattern = @"^(\w|\.).*";
+                string imageLinkPattern = @"^(\w|\.|~).*";
 
                 if (Regex.Matches(text, imageLinkPattern).Count > 0)
                 {
