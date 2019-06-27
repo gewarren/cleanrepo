@@ -318,7 +318,7 @@ namespace CleanRepo
                     // instead of an image to display.
 
                     // RegEx pattern to match
-                    string mdImageRegEx = @"\]\(([^\)])*\.png([^\)])*\)";
+                    string mdImageRegEx = @"\]\([^\]]*(\.png){1}?[^\)]*\){1}?";
 
                     // There could be more than one image reference on the line, hence the foreach loop.
                     foreach (Match match in Regex.Matches(line, mdImageRegEx, RegexOptions.IgnoreCase))
@@ -880,6 +880,7 @@ namespace CleanRepo
             // ![Auto hide](../ide/media/vs2015_auto_hide.png)
             // ![Unit Test Explorer showing Run All button](../test/media/unittestexplorer-beta-.png "UnitTestExplorer(beta)")
             // ![Architecture](./media/ci-cd-flask/Architecture.PNG?raw=true)
+            // [VS image](../media/pic(azure)_1.png)
             // ![link to video](../data-tools/media/playvideo.gif "PlayVideo")For a video version of this topic, see...
             // <img src="../data-tools/media/logo_azure-datalake.svg" alt=""
             // The Light Bulb icon ![Small Light Bulb Icon](media/vs2015_lightbulbsmall.png "VS2017_LightBulbSmall"),
@@ -904,7 +905,8 @@ namespace CleanRepo
                 string relativePath;
                 try
                 {
-                    relativePath = text.Substring(0, text.IndexOf(')'));
+                    // LastIndexOf() handles links with () in them like [VS image](../media/pic(azure)_1.png)
+                    relativePath = text.Substring(0, text.LastIndexOf(')'));
                 }
                 catch (ArgumentOutOfRangeException)
                 {
