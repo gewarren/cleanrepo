@@ -577,7 +577,7 @@ namespace CleanRepo
         {
             string text = File.ReadAllText(tocFile.FullName);
 
-            string linkRegEx = tocFile.Extension.ToLower() == ".yml" ? @"href: (.)*" + linkedFile.Name : @"]\((?!http)([^\)])*" + linkedFile.Name + @"\)";
+            string linkRegEx = tocFile.Extension.ToLower() == ".yml" ? @"href:.*" + linkedFile.Name : @"]\((?!http)([^\)])*" + linkedFile.Name + @"\)";
 
             // For each link that contains the file name...
             foreach (Match match in Regex.Matches(text, linkRegEx, RegexOptions.IgnoreCase))
@@ -949,7 +949,12 @@ namespace CleanRepo
             else if (text.Contains("href:"))
             {
                 // e.g. href: ../ide/quickstart-python.md
+                // e.g. href: "configure-ldaps.md"
                 // e.g. href: debugger/getting-started-with-the-debugger.md?context=visualstudio/default&contextView=vs-2017
+
+                // Remove any quotation marks
+                text = text.Replace("\"", "");
+
                 text = text.Substring(text.IndexOf("href:") + 5).Trim();
 
                 // Handle contextual TOC links and others that have a ? in them
