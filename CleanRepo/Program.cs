@@ -845,8 +845,17 @@ namespace CleanRepo
 
                 if (relativePath != null)
                 {
-                    // Construct the full path to the referenced file
-                    string fullPath = Path.Combine(linkingFile.DirectoryName, relativePath);
+                    string fullPath;
+                    try
+                    {
+                        // Construct the full path to the referenced file
+                        fullPath = Path.Combine(linkingFile.DirectoryName, relativePath);
+                    }
+                    catch (ArgumentException e)
+                    {
+                        Console.WriteLine($"\nCaught exception while constructing full path for '{relativePath}': {e.Message}");
+                        throw;
+                    }
 
                     // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
                     fullPath = Path.GetFullPath(fullPath);
