@@ -939,6 +939,14 @@ namespace CleanRepo
                     relativePath = relativePath.Substring(0, pngIndex + 4);
                 }
 
+                // Handle contextual TOC links, for example:
+                // Check your [subscription](../glossary.md?toc=%2fnetworking%2ftoc.json).
+                int contextualIndex = relativePath.ToLowerInvariant().IndexOf(".md?toc");
+                if (contextualIndex > 0)
+                {
+                    relativePath = relativePath.Substring(0, contextualIndex + 3);
+                }
+
                 return relativePath;
             }
             else if (text.Contains("]:"))
