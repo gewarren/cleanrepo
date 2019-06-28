@@ -506,8 +506,10 @@ namespace CleanRepo
         {
             var countNotFound = 0;
             var countDeleted = 0;
+            var countNotDeleted = 0;
 
-            StringBuilder output = new StringBuilder("\nTopic details:\n\n");
+            StringBuilder output = new StringBuilder("\nTopics not in any TOC file:\n\n");
+            StringBuilder deleteOutput = new StringBuilder();
 
             foreach (var markdownFile in markdownFiles)
             {
@@ -533,13 +535,14 @@ namespace CleanRepo
 
                 if (!found)
                 {
-                    ++ countNotFound;
+                    ++countNotFound;
+                    output.AppendLine(markdownFile.FullName);
 
-                    // Try to delete the file if the option is set.
+                    // Delete the file if the option is set.
                     if (deleteOrphanedTopics)
                     {
+                        // First check if the file is referenced from a non-TOC file.
                         var isLinked = false;
-                        var referencedFile = "";
                         foreach (var otherMarkdownFile in markdownFiles.Where(file => file != markdownFile))
                         {
                             if (!IsFileLinkedInFile(markdownFile, otherMarkdownFile))
@@ -547,30 +550,30 @@ namespace CleanRepo
                                 continue;
                             }
 
-                            referencedFile = otherMarkdownFile.FullName;
                             isLinked = true;
                             break;
                         }
 
                         if (isLinked)
                         {
-                            output.AppendLine($"Unable to delete '{markdownFile.FullName}'");
-                            output.AppendLine($"    It is referenced in '{referencedFile}'");
+                            ++countNotDeleted;
+                            deleteOutput.AppendLine(markdownFile.FullName);
                         }
                         else
                         {
-                            ++ countDeleted;
-                            output.AppendLine($"Deleting '{markdownFile.FullName}'.");
-
                             File.Delete(markdownFile.FullName);
+                            ++countDeleted;
                         }
                     }
                 }
             }
 
-            var deletedMessage = deleteOrphanedTopics ? $"Deleted {countDeleted} of these files." : "";
-            output.AppendLine($"\nFound { countNotFound} .md files that aren't referenced in a TOC. {deletedMessage}\n");
+            output.AppendLine($"\nFound { countNotFound} .md files that aren't referenced in a TOC.");
             Console.Write(output.ToString());
+            if (countNotDeleted > 0)
+            {
+                Console.Write($"\nThe following {countNotDeleted} files were not deleted because they're referenced in another file:\n\n" + deleteOutput.ToString());
+            }
         }
 
         private static bool IsFileLinkedFromTocFile(FileInfo linkedFile, FileInfo tocFile)
