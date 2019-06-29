@@ -161,12 +161,13 @@ namespace CleanRepo
                     // E.g. [!INCLUDE [P2S FAQ All](vpn-gateway-faq-p2s-all-include.md)]
 
                     // RegEx pattern to match
-                    string includeLinkPattern = @"\[!INCLUDE[ ]?\[([^\]]*?)\]\((.*?).md[ ]*\)[ ]*\]";
+                    string includeLinkPattern = @"\[!INCLUDE[ ]?\[[^\]]*?\]\((.*?\.md)";
 
                     // There could be more than one INCLUDE reference on the line, hence the foreach loop.
                     foreach (Match match in Regex.Matches(line, includeLinkPattern, RegexOptions.IgnoreCase))
                     {
-                        string relativePath = GetFilePathFromLink(match.Groups[0].Value);
+                        // Get the first capture group, which is the relative path ending in '.md'.
+                        string relativePath = match.Groups[1].Value.Trim();
 
                         if (relativePath != null)
                         {
@@ -318,12 +319,20 @@ namespace CleanRepo
                     // instead of an image to display.
 
                     // RegEx pattern to match
-                    string mdImageRegEx = @"\]\([^\]]*(\.png){1}?[^\)]*\){1}?";
+                    string mdImageRegEx = @"\]\(([^\)]*?.png)";
 
                     // There could be more than one image reference on the line, hence the foreach loop.
                     foreach (Match match in Regex.Matches(line, mdImageRegEx, RegexOptions.IgnoreCase))
                     {
-                        string relativePath = GetFilePathFromLink(match.Groups[0].Value);
+                        string relativePath = match.Groups[1].Value.Trim();
+
+                        if (relativePath.StartsWith("/") || relativePath.StartsWith("http"))
+                        {
+                            // The file is in a different repo, so ignore it.
+                            continue;
+
+                            // TODO - For links that start with "/", check if they are in the same repo.
+                        }
 
                         if (relativePath != null)
                         {
@@ -343,7 +352,7 @@ namespace CleanRepo
                             }
                             catch (ArgumentException)
                             {
-                                Console.WriteLine($"Possible bad image link '{line}' in file '{markdownFile.FullName}'.\n");
+                                Console.WriteLine($"Possible bad image link '{match.Groups[0].Value}' in file '{markdownFile.FullName}'.\n");
                                 break;
                             }
 
@@ -354,7 +363,7 @@ namespace CleanRepo
                             }
                             catch (ArgumentException)
                             {
-                                Console.WriteLine($"Possible bad image link '{line}' in file '{markdownFile.FullName}'.\n");
+                                Console.WriteLine($"Possible bad image link '{match.Groups[0].Value}' in file '{markdownFile.FullName}'.\n");
                                 break;
                             }
 
@@ -368,10 +377,18 @@ namespace CleanRepo
                     // Match "img src=" references
                     // Example: <img data-hoverimage="./images/getstarted.svg" src="./images/getstarted.png" alt="Get started icon" />
 
-                    string htmlImageRegEx = @"<img([^>])*src([^>])*>";
+                    string htmlImageRegEx = "<img[^>]*src[ ]*=[ ]*\"([^>]*.png).*\".*>{1}?";
                     foreach (Match match in Regex.Matches(line, htmlImageRegEx, RegexOptions.IgnoreCase))
                     {
-                        string relativePath = GetFilePathFromLink(match.Groups[0].Value);
+                        string relativePath = match.Groups[1].Value.Trim();
+
+                        if (relativePath.StartsWith("/") || relativePath.StartsWith("http"))
+                        {
+                            // The file is in a different repo, so ignore it.
+                            continue;
+
+                            // TODO - check if link is site-relative to the same docset
+                        }
 
                         if (relativePath != null)
                         {
@@ -402,10 +419,18 @@ namespace CleanRepo
                     // Match reference-style image links
                     // Example: [0]: ../../media/vs-acr-provisioning-dialog-2019.png
 
-                    string referenceLinkRegEx = @"\[(.)*?\]:(.)*?\.png";
+                    string referenceLinkRegEx = @"\[.*\]:(.*\.png)";
                     foreach (Match match in Regex.Matches(line, referenceLinkRegEx, RegexOptions.IgnoreCase))
                     {
-                        string relativePath = GetFilePathFromLink(match.Groups[0].Value);
+                        string relativePath = match.Groups[1].Value.Trim();
+
+                        if (relativePath.StartsWith("/") || relativePath.StartsWith("http"))
+                        {
+                            // The file is in a different repo, so ignore it.
+                            continue;
+
+                            // TODO - For links that start with "/", check if they are in the same repo.
+                        }
 
                         if (relativePath != null)
                         {
@@ -524,13 +549,13 @@ namespace CleanRepo
 
                 foreach (var tocFile in tocFiles)
                 {
-                    if (!IsFileLinkedFromTocFile(markdownFile, tocFile))
+                    if (IsFileLinkedFromTocFile(markdownFile, tocFile))
                     {
-                        continue;
+                        found = true;
+                        break;
                     }
 
-                    found = true;
-                    break;
+                    continue;
                 }
 
                 if (!found)
@@ -545,7 +570,7 @@ namespace CleanRepo
                         var isLinked = false;
                         foreach (var otherMarkdownFile in markdownFiles.Where(file => file != markdownFile))
                         {
-                            if (!IsFileLinkedInFile(markdownFile, otherMarkdownFile))
+                            if (!IsFileLinkedFromFile(markdownFile, otherMarkdownFile))
                             {
                                 continue;
                             }
@@ -568,7 +593,7 @@ namespace CleanRepo
                 }
             }
 
-            output.AppendLine($"\nFound { countNotFound} .md files that aren't referenced in a TOC.");
+            output.AppendLine($"\nFound {countNotFound} .md files that aren't referenced in a TOC.");
             Console.Write(output.ToString());
             if (countNotDeleted > 0)
             {
@@ -580,18 +605,36 @@ namespace CleanRepo
         {
             string text = File.ReadAllText(tocFile.FullName);
 
-            string linkRegEx = tocFile.Extension.ToLower() == ".yml" ? @"href:.*" + linkedFile.Name : @"]\((?!http)([^\)])*" + linkedFile.Name + @"\)";
+            // Example links .yml/.md:
+            // href: ide/managing-external-tools.md
+            // # [Managing External Tools](ide/managing-external-tools.md)
+
+            string linkRegEx = tocFile.Extension.ToLower() == ".yml" ?
+                @"href:(.*?" + linkedFile.Name + ")" :
+                @"\]\((?!http)(([^\)])*?" + linkedFile.Name + @")";
 
             // For each link that contains the file name...
             foreach (Match match in Regex.Matches(text, linkRegEx, RegexOptions.IgnoreCase))
             {
                 // Get the file-relative path to the linked file.
-                string relativePath = GetFilePathFromLink(match.Groups[0].Value);
+                string relativePath = match.Groups[1].Value.Trim();
+
+                // Remove any quotation marks
+                relativePath = relativePath.Replace("\"", "");
+
+                if (relativePath.StartsWith("/") || relativePath.StartsWith("http"))
+                {
+                    // The file is in a different repo, so ignore it.
+                    continue;
+
+                    // TODO - For links that start with "/", check if they are in the same repo.
+                }
 
                 if (relativePath != null)
                 {
                     // Construct the full path to the referenced file
                     string fullPath = Path.Combine(tocFile.DirectoryName, relativePath);
+
                     // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
                     fullPath = Path.GetFullPath(fullPath);
 
@@ -709,19 +752,18 @@ namespace CleanRepo
 
                 string text = File.ReadAllText(linkingFile.FullName);
 
-                string linkRegEx = linkingFile.Extension.ToLower() == ".yml" ? @"href: (.)*\.md" : @"]\((?!http)([^\)])*\.md\)";
+                string linkRegEx = linkingFile.Extension.ToLower() == ".yml" ?
+                    @"href:(.*\.md)" :
+                    @"\]\((?!http)([^\)]*\.md)\)";
 
                 // For each link in the file...
                 foreach (Match match in Regex.Matches(text, linkRegEx, RegexOptions.IgnoreCase))
                 {
                     // Get the file-relative path to the linked file.
-                    string relativePath = GetFilePathFromLink(match.Groups[0].Value);
+                    string relativePath = match.Groups[1].Value.Trim();
 
-                    if (relativePath is null)
-                    {
-                        Console.WriteLine($"Found a possibly malformed link '{match.Groups[0].Value}' in '{linkingFile.FullName}'.\n");
-                        break;
-                    }
+                    // Remove any quotation marks
+                    text = text.Replace("\"", "");
 
                     // Construct the full path to the linked file.
                     string fullPath = Path.Combine(linkingFile.DirectoryName, relativePath);
@@ -787,7 +829,7 @@ namespace CleanRepo
 
                 foreach (var tocFile in tocFiles)
                 {
-                    if (IsFileLinkedInFile(markdownFile, tocFile))
+                    if (IsFileLinkedFromFile(markdownFile, tocFile))
                     {
                         topics[markdownFile.FullName]++;
                     }
@@ -816,7 +858,7 @@ namespace CleanRepo
         /// <summary>
         /// Checks if the specified file path is referenced in the specified file.
         /// </summary>
-        private static bool IsFileLinkedInFile(FileInfo linkedFile, FileInfo linkingFile)
+        private static bool IsFileLinkedFromFile(FileInfo linkedFile, FileInfo linkingFile)
         {
             if (!File.Exists(linkingFile.FullName))
             {
@@ -825,53 +867,51 @@ namespace CleanRepo
 
             foreach (string line in File.ReadAllLines(linkingFile.FullName))
             {
-                string relativePath = null;
+                // Example links .yml/.md:
+                // href: ide/managing-external-tools.md
+                // [Managing External Tools](ide/managing-external-tools.md)
 
-                if (line.Contains("](")) // Markdown style link
-                {
-                    // If the file name is somewhere in the line of text...
-                    if (line.Contains("(" + linkedFile.Name) || line.Contains("/" + linkedFile.Name))
-                    {
-                        // Now verify the file path to ensure we're talking about the same file
-                        relativePath = GetFilePathFromLink(line);
-                    }
-                }
-                else if (line.Contains("href:")) // YAML style link
-                {
-                    // If the file name is somewhere in the line of text...
-                    if (line.Contains(linkedFile.Name))
-                    {
-                        // Now verify the file path to ensure we're talking about the same file
-                        relativePath = GetFilePathFromLink(line);
-                    }
-                }
+                string linkRegEx = linkingFile.Extension.ToLower() == ".yml" ?
+                    @"href:(.*?" + linkedFile.Name + ")" :
+                    @"\]\((?!http)(([^\)])*?" + linkedFile.Name + @")";
 
-                if (relativePath != null)
+                // For each link that contains the file name...
+                foreach (Match match in Regex.Matches(line, linkRegEx, RegexOptions.IgnoreCase))
                 {
-                    string fullPath;
-                    try
-                    {
-                        // Construct the full path to the referenced file
-                        fullPath = Path.Combine(linkingFile.DirectoryName, relativePath);
-                    }
-                    catch (ArgumentException e)
-                    {
-                        Console.WriteLine($"\nCaught exception while constructing full path for '{relativePath}': {e.Message}");
-                        throw;
-                    }
+                    // Get the file-relative path to the linked file.
+                    string relativePath = match.Groups[1].Value.Trim();
 
-                    // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
-                    fullPath = Path.GetFullPath(fullPath);
-                    if (fullPath != null)
+                    // Remove any quotation marks
+                    relativePath = relativePath.Replace("\"", "");
+
+                    if (relativePath != null)
                     {
-                        // See if our constructed path matches the actual file we think it is
-                        if (String.Compare(fullPath, linkedFile.FullName, true) == 0)
+                        string fullPath;
+                        try
                         {
-                            return true;
+                            // Construct the full path to the referenced file
+                            fullPath = Path.Combine(linkingFile.DirectoryName, relativePath);
                         }
-                        else
+                        catch (ArgumentException e)
                         {
-                            // If we get here, the file name matched but the full path did not.
+                            Console.WriteLine($"\nCaught exception while constructing full path " +
+                                $"for '{relativePath}' in '{linkingFile.FullName}': {e.Message}");
+                            throw;
+                        }
+
+                        // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
+                        fullPath = Path.GetFullPath(fullPath);
+                        if (fullPath != null)
+                        {
+                            // See if our constructed path matches the actual file we think it is
+                            if (String.Compare(fullPath, linkedFile.FullName, true) == 0)
+                            {
+                                return true;
+                            }
+                            else
+                            {
+                                // If we get here, the file name matched but the full path did not.
+                            }
                         }
                     }
                 }
@@ -879,155 +919,6 @@ namespace CleanRepo
 
             // We did not find this file linked in the specified file.
             return false;
-        }
-
-        /// <summary>
-        /// Returns the file path from the specified text that contains 
-        /// either the pattern "[text](file path)", "href:", or "img src=".
-        /// Returns null if the file is in a different repo or is an http URL.
-        /// </summary>
-        private static string GetFilePathFromLink(string text)
-        {
-            // Example image references:
-            // ![Auto hide](../ide/media/vs2015_auto_hide.png)
-            // ![Unit Test Explorer showing Run All button](../test/media/unittestexplorer-beta-.png "UnitTestExplorer(beta)")
-            // ![Architecture](./media/ci-cd-flask/Architecture.PNG?raw=true)
-            // [VS image](../media/pic(azure)_1.png)
-            // ![link to video](../data-tools/media/playvideo.gif "PlayVideo")For a video version of this topic, see...
-            // <img src="../data-tools/media/logo_azure-datalake.svg" alt=""
-            // The Light Bulb icon ![Small Light Bulb Icon](media/vs2015_lightbulbsmall.png "VS2017_LightBulbSmall"),
-
-            // but not:
-            // <![CDATA[
-
-            // Example .md file reference in a TOC:
-            // ### [Managing External Tools](ide/managing-external-tools.md)
-
-            if (text.Contains("]("))
-            {
-                text = text.Substring(text.IndexOf("](") + 2);
-
-                if (text.StartsWith("/") || text.StartsWith("http"))
-                {
-                    // The file is in a different repo, so ignore it.
-                    return null;
-                }
-
-                // Look for the closing parenthesis.
-                string relativePath;
-                try
-                {
-                    // LastIndexOf() handles links with () in them like [VS image](../media/pic(azure)_1.png)
-                    relativePath = text.Substring(0, text.LastIndexOf(')'));
-                }
-                catch (ArgumentOutOfRangeException)
-                {
-                    // Image link is likely badly formatted.
-                    Console.WriteLine($"Possible malformed image link in '{text}'.\n");
-                    return null;
-                }
-
-                // Trim any whitespace on the beginning and end
-                relativePath = relativePath.Trim();
-
-                // If there is a whitespace character in the string, truncate it there.
-                int index = relativePath.IndexOf(' ');
-                if (index > 0)
-                {
-                    relativePath = relativePath.Substring(0, index);
-                }
-
-                // Handle links with a # sign, e.g. media/how-to-use-lightboxes/xamarin.png#lightbox.
-                int hashIndex = relativePath.LastIndexOf('#');
-                if (hashIndex > 0)
-                {
-                    relativePath = relativePath.Substring(0, hashIndex);
-                }
-
-                // Handle links with ?raw=true on the end, for example
-                int pngIndex = relativePath.ToLowerInvariant().LastIndexOf(".png");
-                if (pngIndex > 0 && pngIndex != (relativePath.Length - 4))
-                {
-                    relativePath = relativePath.Substring(0, pngIndex + 4);
-                }
-
-                // Handle contextual TOC links, for example:
-                // Check your [subscription](../glossary.md?toc=%2fnetworking%2ftoc.json).
-                int contextualIndex = relativePath.ToLowerInvariant().IndexOf(".md?toc");
-                if (contextualIndex > 0)
-                {
-                    relativePath = relativePath.Substring(0, contextualIndex + 3);
-                }
-
-                return relativePath;
-            }
-            else if (text.Contains("]:"))
-            {
-                text = text.Substring(text.IndexOf("]:") + 2).Trim();
-                return text;
-            }
-            else if (text.Contains("href:"))
-            {
-                // e.g. href: ../ide/quickstart-python.md
-                // e.g. href: "configure-ldaps.md"
-                // e.g. href: debugger/getting-started-with-the-debugger.md?context=visualstudio/default&contextView=vs-2017
-
-                // Remove any quotation marks
-                text = text.Replace("\"", "");
-
-                text = text.Substring(text.IndexOf("href:") + 5).Trim();
-
-                // Handle contextual TOC links and others that have a ? in them
-                if (text.IndexOf('?') >= 0)
-                {
-                    text = text.Substring(0, text.IndexOf('?'));
-                }
-
-                return text;
-            }
-            else if (text.Contains("src="))
-            {
-                text = text.Substring(text.IndexOf("src=") + 4);
-
-                // Trim any preceding spaces e.g. <img src= "./media/running-icon.png">
-                text = text.Trim();
-
-                // Remove opening quotation marks, if present.
-                text = text.TrimStart('"');
-
-                if (text.StartsWith("/") || text.StartsWith("http"))
-                {
-                    // The file is in a different repo, so ignore it.
-                    return null;
-                }
-
-                // Check that the path is valid, i.e. it starts with a letter or a '.' or a '~'.
-                // RegEx pattern to match
-                string imageLinkPattern = @"^(\w|\.|~).*";
-
-                if (Regex.Matches(text, imageLinkPattern).Count > 0)
-                {
-                    try
-                    {
-                        return text.Substring(0, text.IndexOf('"'));
-                    }
-                    catch (ArgumentException)
-                    {
-                        Console.WriteLine($"Caught ArgumentException while extracting the image path from the following text: {text}\n");
-                        return null;
-                    }
-                }
-                else
-                {
-                    // Unrecognizable file path.
-                    Console.WriteLine($"Unrecognizable file path (ignoring this image link): {text}\n");
-                    return null;
-                }
-            }
-            else
-            {
-                throw new ArgumentException($"Argument 'line' does not contain an expected link pattern.");
-            }
         }
 
         /// <summary>
