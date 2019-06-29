@@ -314,9 +314,17 @@ namespace CleanRepo
             {
                 foreach (string line in File.ReadAllLines(markdownFile.FullName))
                 {
-                    // Match []() image references where the path to the image file includes the name of the input media directory.
-                    // This includes links that don't start with ! for images that are referenced as a hyperlink
-                    // instead of an image to display.
+                    /* Support all of the following variations:
+                    *
+                    [VS image](../media/pic(azure)_1.png)
+                    [VS image](../media/pic(azure)_1.png?raw=true)
+                    [hello](media/how-to-use-lightboxes/xamarin.png#lightbox)
+                    ![Auto hide](../ide/media/vs2015_auto_hide.png)
+                    ![Unit Test Explorer showing Run All button](../test/media/unittestexplorer-beta-.png "UnitTestExplorer(beta)")
+                    ![Architecture](./media/ci-cd-flask/Architecture.PNG?raw=true)
+                    The Light Bulb icon ![Small Light Bulb Icon](media/vs2015_lightbulbsmall.png "VS2017_LightBulbSmall")
+                    *
+                    */
 
                     // RegEx pattern to match
                     string mdImageRegEx = @"\]\(([^\)]*?.png)";
