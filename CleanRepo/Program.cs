@@ -1,9 +1,10 @@
-﻿using Newtonsoft.Json;
+﻿using CleanRepo.Extensions;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -17,8 +18,7 @@ namespace CleanRepo
         {
             // Command line options
             var options = new Options();
-            bool parsedArgs = CommandLine.Parser.Default.ParseArguments(args, options);
-
+            var parsedArgs = CommandLine.Parser.Default.ParseArguments(args, options);
             if (parsedArgs)
             {
                 // Verify that the input directory exists.
@@ -27,6 +27,9 @@ namespace CleanRepo
                     Console.WriteLine($"\nDirectory '{options.InputDirectory}' does not exist.");
                     return;
                 }
+
+                var stopwatch = new Stopwatch();
+                stopwatch.Start();
 
                 // Find orphaned topics
                 if (options.FindOrphanedTopics)
@@ -124,6 +127,9 @@ namespace CleanRepo
 
                     Console.WriteLine("DONE");
                 }
+
+                stopwatch.Stop();
+                Console.WriteLine($"Elapsed time: {stopwatch.Elapsed.ToHumanReadableString()}");
 
                 // Uncomment for debugging to see console output.
                 //Console.WriteLine("\nPress any key to continue.");
