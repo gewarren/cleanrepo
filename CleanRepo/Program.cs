@@ -1,9 +1,10 @@
-﻿using Newtonsoft.Json;
+﻿using CleanRepo.Extensions;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -17,8 +18,7 @@ namespace CleanRepo
         {
             // Command line options
             var options = new Options();
-            bool parsedArgs = CommandLine.Parser.Default.ParseArguments(args, options);
-
+            var parsedArgs = CommandLine.Parser.Default.ParseArguments(args, options);
             if (parsedArgs)
             {
                 // Verify that the input directory exists.
@@ -27,6 +27,9 @@ namespace CleanRepo
                     Console.WriteLine($"\nDirectory '{options.InputDirectory}' does not exist.");
                     return;
                 }
+
+                var stopwatch = new Stopwatch();
+                stopwatch.Start();
 
                 // Find orphaned topics
                 if (options.FindOrphanedTopics)
@@ -124,6 +127,9 @@ namespace CleanRepo
 
                     Console.WriteLine("DONE");
                 }
+
+                stopwatch.Stop();
+                Console.WriteLine($"Elapsed time: {stopwatch.Elapsed.ToHumanReadableString()}");
 
                 // Uncomment for debugging to see console output.
                 //Console.WriteLine("\nPress any key to continue.");
@@ -541,51 +547,30 @@ namespace CleanRepo
             var countDeleted = 0;
             var countNotDeleted = 0;
 
-            StringBuilder output = new StringBuilder("\nTopics not in any TOC file:\n\n");
-            StringBuilder deleteOutput = new StringBuilder();
+            Console.WriteLine("\nTopics not in any TOC or Index file (that are also not includes or shared):\n\n");
+            var deleteOutput = new StringBuilder();
 
-            foreach (var markdownFile in markdownFiles)
+            bool IsTopicFile(FileInfo file) =>
+                !file.FullName.Contains("\\includes\\") &&
+                !file.FullName.Contains("\\_shared\\") &&
+                String.Compare(file.Name, "TOC.md", true) != 0 &&
+                String.Compare(file.Name, "index.md", true) != 0;
+
+            foreach (var markdownFile in markdownFiles.Where(IsTopicFile))
             {
-                bool found = false;
-
-                // If the file is in the Includes directory, or the file is a TOC or index file, ignore it
-                if (markdownFile.FullName.Contains("\\includes\\")
-                    || markdownFile.FullName.Contains("\\_shared\\")
-                    || String.Compare(markdownFile.Name, "TOC.md", true) == 0
-                    || String.Compare(markdownFile.Name, "index.md", true) == 0)
-                    continue;
-
-                foreach (var tocFile in tocFiles)
-                {
-                    if (IsFileLinkedFromTocFile(markdownFile, tocFile))
-                    {
-                        found = true;
-                        break;
-                    }
-
-                    continue;
-                }
-
+                var found = tocFiles.Any(tocFile => IsFileLinkedFromTocFile(markdownFile, tocFile));
                 if (!found)
                 {
                     ++countNotFound;
-                    output.AppendLine(markdownFile.FullName);
+                    Console.WriteLine(markdownFile.FullName);
 
                     // Delete the file if the option is set.
                     if (deleteOrphanedTopics)
                     {
                         // First check if the file is referenced from a non-TOC file.
-                        var isLinked = false;
-                        foreach (var otherMarkdownFile in markdownFiles.Where(file => file != markdownFile))
-                        {
-                            if (!IsFileLinkedFromFile(markdownFile, otherMarkdownFile))
-                            {
-                                continue;
-                            }
-
-                            isLinked = true;
-                            break;
-                        }
+                        var isLinked =
+                            markdownFiles.Where(file => file != markdownFile)
+                                         .Any(otherMarkdownFile => IsFileLinkedFromFile(markdownFile, otherMarkdownFile));
 
                         if (isLinked)
                         {
@@ -601,8 +586,7 @@ namespace CleanRepo
                 }
             }
 
-            output.AppendLine($"\nFound {countNotFound} .md files that aren't referenced in a TOC.");
-            Console.Write(output.ToString());
+            Console.WriteLine($"\nFound {countNotFound} .md files that aren't referenced in a TOC.");
             if (countNotDeleted > 0)
             {
                 Console.Write($"\nThe following {countNotDeleted} files were not deleted because they're referenced in another file:\n\n" + deleteOutput.ToString());
@@ -873,7 +857,7 @@ namespace CleanRepo
                 return false;
             }
 
-            foreach (string line in File.ReadAllLines(linkingFile.FullName))
+            foreach (var line in File.ReadAllLines(linkingFile.FullName))
             {
                 // Example links .yml/.md:
                 // href: ide/managing-external-tools.md
