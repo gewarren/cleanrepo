@@ -255,8 +255,8 @@ namespace CleanRepo
 
             Dictionary<string, int> includeFiles = new Dictionary<string, int>();
 
-            if (string.Compare(dir.Name, "includes", true) == 0
-                || string.Compare(dir.Name, "_shared", true) == 0)
+            if (String.Compare(dir.Name, "includes", true) == 0
+                || String.Compare(dir.Name, "_shared", true) == 0)
             {
                 // This is a folder that is likely to contain "include"-type files, i.e. files that aren't in the TOC.
 
@@ -270,8 +270,8 @@ namespace CleanRepo
             {
                 foreach (var subDirectory in dir.EnumerateDirectories("*", SearchOption.AllDirectories))
                 {
-                    if (string.Compare(subDirectory.Name, "includes", true) == 0
-                        || string.Compare(subDirectory.Name, "_shared", true) == 0)
+                    if (String.Compare(subDirectory.Name, "includes", true) == 0
+                        || String.Compare(subDirectory.Name, "_shared", true) == 0)
                     {
                         // This is a folder that is likely to contain "include"-type files, i.e. files that aren't in the TOC.
 
@@ -553,8 +553,8 @@ namespace CleanRepo
             bool IsTopicFile(FileInfo file) =>
                 !file.FullName.Contains("\\includes\\") &&
                 !file.FullName.Contains("\\_shared\\") &&
-                string.Compare(file.Name, "TOC.md", true) != 0 &&
-                string.Compare(file.Name, "index.md", true) != 0;
+                String.Compare(file.Name, "TOC.md", true) != 0 &&
+                String.Compare(file.Name, "index.md", true) != 0;
 
             foreach (var markdownFile in markdownFiles.Where(IsTopicFile))
             {
@@ -633,7 +633,7 @@ namespace CleanRepo
                     if (fullPath != null)
                     {
                         // See if our constructed path matches the actual file we think it is
-                        if (string.Compare(fullPath, linkedFile.FullName, true) == 0)
+                        if (String.Compare(fullPath, linkedFile.FullName, true) == 0)
                         {
                             return true;
                         }
@@ -896,7 +896,7 @@ namespace CleanRepo
                         if (fullPath != null)
                         {
                             // See if our constructed path matches the actual file we think it is
-                            if (string.Compare(fullPath, linkedFile.FullName, true) == 0)
+                            if (String.Compare(fullPath, linkedFile.FullName, true) == 0)
                             {
                                 return true;
                             }
