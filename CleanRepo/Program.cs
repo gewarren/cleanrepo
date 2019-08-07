@@ -7,6 +7,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 
 namespace CleanRepo
 {
@@ -66,13 +67,13 @@ namespace CleanRepo
                 else if (options.FindOrphanedImages)
                 {
                     string recursive = options.SearchRecursively ? "recursively " : "";
-                    Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory {recursive}for orphaned .png files...\n");
+                    Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory {recursive}for orphaned .png/.jpg/.gif files...\n");
 
                     Dictionary<string, int> imageFiles = GetMediaFiles(options.InputDirectory, options.SearchRecursively);
 
                     if (imageFiles.Count == 0)
                     {
-                        Console.WriteLine("\nNo .png files were found!");
+                        Console.WriteLine("\nNo .png/.jpg/.gif files were found!");
                         return;
                     }
 
@@ -322,18 +323,18 @@ namespace CleanRepo
                 {
                     /* Support all of the following variations:
                     *
-                    [VS image](../media/pic(azure)_1.png)
-                    [VS image](../media/pic(azure)_1.png?raw=true)
                     [hello](media/how-to-use-lightboxes/xamarin.png#lightbox)
                     ![Auto hide](../ide/media/vs2015_auto_hide.png)
                     ![Unit Test Explorer showing Run All button](../test/media/unittestexplorer-beta-.png "UnitTestExplorer(beta)")
                     ![Architecture](./media/ci-cd-flask/Architecture.PNG?raw=true)
                     The Light Bulb icon ![Small Light Bulb Icon](media/vs2015_lightbulbsmall.png "VS2017_LightBulbSmall")
                     *
+                    * Does not currently support file names that contain parentheses:
+                    * [VS image](../media/pic(azure)_1.png)
                     */
 
                     // RegEx pattern to match
-                    string mdImageRegEx = @"\]\(([^\)]*?.png)";
+                    string mdImageRegEx = @"\]\(([^\)]*?\.(png|jpg|gif))";
 
                     // There could be more than one image reference on the line, hence the foreach loop.
                     foreach (Match match in Regex.Matches(line, mdImageRegEx, RegexOptions.IgnoreCase))
@@ -391,7 +392,7 @@ namespace CleanRepo
                     // Match "img src=" references
                     // Example: <img data-hoverimage="./images/getstarted.svg" src="./images/getstarted.png" alt="Get started icon" />
 
-                    string htmlImageRegEx = "<img[^>]*src[ ]*=[ ]*\"([^>]*.png).*\".*>{1}?";
+                    string htmlImageRegEx = "<img[^>]*src[ ]*=[ ]*\"([^>]*.(png|gif|jpg)).*\".*>{1}?";
                     foreach (Match match in Regex.Matches(line, htmlImageRegEx, RegexOptions.IgnoreCase))
                     {
                         string relativePath = match.Groups[1].Value.Trim();
@@ -433,7 +434,7 @@ namespace CleanRepo
                     // Match reference-style image links
                     // Example: [0]: ../../media/vs-acr-provisioning-dialog-2019.png
 
-                    string referenceLinkRegEx = @"\[.*\]:(.*\.png)";
+                    string referenceLinkRegEx = @"\[.*\]:(.*\.(png|gif|jpg))";
                     foreach (Match match in Regex.Matches(line, referenceLinkRegEx, RegexOptions.IgnoreCase))
                     {
                         string relativePath = match.Groups[1].Value.Trim();
@@ -497,7 +498,7 @@ namespace CleanRepo
 
             string deleted = deleteOrphanedImages ? "and deleted " : "";
 
-            Console.WriteLine($"\nFound {deleted}{count} orphaned .png files:\n");
+            Console.WriteLine($"\nFound {deleted}{count} orphaned .png/.jpg/.gif files:\n");
             Console.WriteLine(output.ToString());
             Console.WriteLine("DONE");
         }
@@ -516,7 +517,7 @@ namespace CleanRepo
         }
 
         /// <summary>
-        /// Returns a dictionary of all .png files in the directory.
+        /// Returns a dictionary of all .png/.jpg/.gif files in the directory.
         /// The search includes the specified directory and (optionally) all its subdirectories.
         /// </summary>
         private static Dictionary<string, int> GetMediaFiles(string mediaDirectory, bool searchRecursively = true)
@@ -527,10 +528,20 @@ namespace CleanRepo
 
             Dictionary<string, int> mediaFiles = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
-            foreach (var file in dir.EnumerateFiles("*.png", searchOption))
+            Parallel.ForEach(dir.EnumerateFiles("*.png", searchOption), file =>
             {
                 mediaFiles.Add(file.FullName.ToLower(), 0);
-            }
+            });
+
+            Parallel.ForEach(dir.EnumerateFiles("*.jpg", searchOption), file =>
+            {
+                mediaFiles.Add(file.FullName.ToLower(), 0);
+            });
+
+            Parallel.ForEach(dir.EnumerateFiles("*.gif", searchOption), file =>
+            {
+                mediaFiles.Add(file.FullName.ToLower(), 0);
+            });
 
             return mediaFiles;
         }

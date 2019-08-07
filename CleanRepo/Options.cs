@@ -6,7 +6,7 @@ namespace CleanRepo
     // Define a class to receive parsed values
     class Options
     {
-        [Option('d', "directory", Required = true, HelpText = "Directory to start search for markdown files, or the media directory to search in for orphaned .png files, or the directory to search in for orphaned INCLUDE files.")]
+        [Option('d', "directory", Required = true, HelpText = "Directory to start search for markdown files, or the media directory to search in for orphaned .png/.gif/.jpg files, or the directory to search in for orphaned INCLUDE files.")]
         public string InputDirectory { get; set; }
 
         [Option('o', "orphaned_topics", HelpText = "Use this option to find orphaned topics.")]
@@ -15,13 +15,13 @@ namespace CleanRepo
         [Option('m', "multiples", HelpText = "Use this option to find topics that appear more than once in one or separate TOC.md files.")]
         public bool FindMultiples { get; set; }
 
-        [Option('p', "orphaned_images", HelpText = "Use this option to find orphaned .png files.")]
+        [Option('p', "orphaned_images", HelpText = "Use this option to find orphaned .png, .gif, or .jpg files.")]
         public bool FindOrphanedImages { get; set; }
 
         [Option('i', "orphaned_includes", HelpText = "Use this option to find orphaned INCLUDE files.")]
         public bool FindOrphanedIncludes { get; set; }
 
-        [Option('g', "delete", DefaultValue = false, Required = false, HelpText = "Set to true to delete orphaned markdown or .png files.")]
+        [Option('g', "delete", DefaultValue = false, Required = false, HelpText = "Set to true to delete orphaned markdown or .png/.jpg/.gif files.")]
         public bool Delete { get; set; }
 
         [Option('l', "redirects", Required = false, HelpText = "Finds backlinks to redirected files in the specified directory.")]
