@@ -155,9 +155,11 @@ namespace CleanRepo
             }
 
             // Gather up all the include references and increment the count for that include file in the Dictionary.
-            foreach (var markdownFile in files)
+            //foreach (var markdownFile in files)
+            Parallel.ForEach(files, markdownFile =>
             {
-                foreach (string line in File.ReadAllLines(markdownFile.FullName))
+                //foreach (string line in File.ReadAllLines(markdownFile.FullName))
+                Parallel.ForEach(File.ReadAllLines(markdownFile.FullName), line =>
                 {
                     // Example include references:
                     // [!INCLUDE [DotNet Restore Note](../includes/dotnet-restore-note.md)]
@@ -208,8 +210,8 @@ namespace CleanRepo
                             }
                         }
                     }
-                }
-            }
+                });
+            });
 
             int count = 0;
 
@@ -269,7 +271,8 @@ namespace CleanRepo
 
             if (searchOption == SearchOption.AllDirectories)
             {
-                foreach (var subDirectory in dir.EnumerateDirectories("*", SearchOption.AllDirectories))
+                //foreach (var subDirectory in dir.EnumerateDirectories("*", SearchOption.AllDirectories))
+                Parallel.ForEach(dir.EnumerateDirectories("*", SearchOption.AllDirectories), subDirectory =>
                 {
                     if (String.Compare(subDirectory.Name, "includes", true) == 0
                         || String.Compare(subDirectory.Name, "_shared", true) == 0)
@@ -281,7 +284,7 @@ namespace CleanRepo
                             includeFiles.Add(file.FullName.ToLower(), 0);
                         }
                     }
-                }
+                });
             }
 
             return includeFiles;
@@ -317,9 +320,11 @@ namespace CleanRepo
             }
 
             // Gather up all the image references and increment the count for that image in the Dictionary.
-            foreach (var markdownFile in files)
+            //foreach (var markdownFile in files)
+            Parallel.ForEach(files, markdownFile =>
             {
-                foreach (string line in File.ReadAllLines(markdownFile.FullName))
+                //foreach (string line in File.ReadAllLines(markdownFile.FullName))
+                Parallel.ForEach(File.ReadAllLines(markdownFile.FullName), line =>
                 {
                     /* Support all of the following variations:
                     *
@@ -461,8 +466,8 @@ namespace CleanRepo
                             }
                         }
                     }
-                }
-            }
+                });
+            });
 
             int count = 0;
 
@@ -567,7 +572,8 @@ namespace CleanRepo
                 String.Compare(file.Name, "TOC.md", true) != 0 &&
                 String.Compare(file.Name, "index.md", true) != 0;
 
-            foreach (var markdownFile in markdownFiles.Where(IsTopicFile))
+            //foreach (var markdownFile in markdownFiles.Where(IsTopicFile))
+            Parallel.ForEach(markdownFiles.Where(IsTopicFile), markdownFile =>
             {
                 var found = tocFiles.Any(tocFile => IsFileLinkedFromTocFile(markdownFile, tocFile));
                 if (!found)
@@ -595,7 +601,7 @@ namespace CleanRepo
                         }
                     }
                 }
-            }
+            });
 
             Console.WriteLine($"\nFound {countNotFound} .md files that aren't referenced in a TOC.");
             if (countNotDeleted > 0)
@@ -748,7 +754,8 @@ namespace CleanRepo
             Dictionary<string, Redirect> redirectLookup = Enumerable.ToDictionary<Redirect, string>(redirects, r => r.source_path);
 
             // For each file...
-            foreach (var linkingFile in linkingFiles)
+            //foreach (var linkingFile in linkingFiles)
+            Parallel.ForEach(linkingFiles, linkingFile =>
             {
                 bool foundOldLink = false;
                 StringBuilder output = new StringBuilder($"FILE '{linkingFile.FullName}' contains the following link(s) to redirected files:\n\n");
@@ -808,7 +815,7 @@ namespace CleanRepo
                 {
                     Console.WriteLine(output.ToString());
                 }
-            }
+            });
         }
         #endregion
 
