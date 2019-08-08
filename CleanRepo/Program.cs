@@ -323,8 +323,7 @@ namespace CleanRepo
             //foreach (var markdownFile in files)
             Parallel.ForEach(files, markdownFile =>
             {
-                //foreach (string line in File.ReadAllLines(markdownFile.FullName))
-                Parallel.ForEach(File.ReadAllLines(markdownFile.FullName), line =>
+                foreach (string line in File.ReadAllLines(markdownFile.FullName))
                 {
                     /* Support all of the following variations:
                     *
@@ -466,7 +465,7 @@ namespace CleanRepo
                             }
                         }
                     }
-                });
+                }
             });
 
             int count = 0;
@@ -533,20 +532,20 @@ namespace CleanRepo
 
             Dictionary<string, int> mediaFiles = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
-            Parallel.ForEach(dir.EnumerateFiles("*.png", searchOption), file =>
+            foreach (var file in dir.EnumerateFiles("*.png", searchOption))
             {
                 mediaFiles.Add(file.FullName.ToLower(), 0);
-            });
+            }
 
-            Parallel.ForEach(dir.EnumerateFiles("*.jpg", searchOption), file =>
+            foreach (var file in dir.EnumerateFiles("*.jpg", searchOption))
             {
                 mediaFiles.Add(file.FullName.ToLower(), 0);
-            });
+            }
 
-            Parallel.ForEach(dir.EnumerateFiles("*.gif", searchOption), file =>
+            foreach (var file in dir.EnumerateFiles("*.gif", searchOption))
             {
                 mediaFiles.Add(file.FullName.ToLower(), 0);
-            });
+            }
 
             return mediaFiles;
         }
