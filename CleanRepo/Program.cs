@@ -372,7 +372,7 @@ namespace CleanRepo
                             catch (ArgumentException)
                             {
                                 Console.WriteLine($"Possible bad image link '{match.Groups[0].Value}' in file '{markdownFile.FullName}'.\n");
-                                break;
+                                continue;
                             }
 
                             // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
@@ -383,7 +383,7 @@ namespace CleanRepo
                             catch (ArgumentException)
                             {
                                 Console.WriteLine($"Possible bad image link '{match.Groups[0].Value}' in file '{markdownFile.FullName}'.\n");
-                                break;
+                                continue;
                             }
 
                             if (fullPath != null)
@@ -553,8 +553,7 @@ namespace CleanRepo
 
         #region Orphaned topics
         /// <summary>
-        /// Lists the files that aren't in a TOC.
-        /// Optionally, only list files that don't have a redirect_url metadata tag.
+        /// Lists the files that aren't referenced from a TOC file.
         /// </summary>
         private static void ListOrphanedTopics(List<FileInfo> tocFiles, List<FileInfo> markdownFiles, bool deleteOrphanedTopics)
         {
@@ -667,6 +666,7 @@ namespace CleanRepo
         #endregion
 
         #region Redirected files
+        // TODO: Use a tuple instead
         private class Redirect
         {
             public string source_path;
