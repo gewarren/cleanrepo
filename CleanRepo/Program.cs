@@ -130,7 +130,7 @@ namespace CleanRepo
                 }
 
                 stopwatch.Stop();
-                Console.WriteLine($"Elapsed time: {stopwatch.Elapsed.ToHumanReadableString()}");
+                Console.WriteLine($"\nElapsed time: {stopwatch.Elapsed.ToHumanReadableString()}");
 
                 // Uncomment for debugging to see console output.
                 //Console.WriteLine("\nPress any key to continue.");
@@ -158,8 +158,7 @@ namespace CleanRepo
             //foreach (var markdownFile in files)
             Parallel.ForEach(files, markdownFile =>
             {
-                //foreach (string line in File.ReadAllLines(markdownFile.FullName))
-                Parallel.ForEach(File.ReadAllLines(markdownFile.FullName), line =>
+                foreach (string line in File.ReadAllLines(markdownFile.FullName))
                 {
                     // Example include references:
                     // [!INCLUDE [DotNet Restore Note](../includes/dotnet-restore-note.md)]
@@ -201,6 +200,7 @@ namespace CleanRepo
                                 // Increment the count for this INCLUDE file in our dictionary
                                 try
                                 {
+                                    // TODO - is this okay to have in a Parallel.ForEach loop?
                                     includeFiles[fullPath.ToLower()]++;
                                 }
                                 catch (KeyNotFoundException)
@@ -210,7 +210,7 @@ namespace CleanRepo
                             }
                         }
                     }
-                });
+                }
             });
 
             int count = 0;
@@ -271,8 +271,7 @@ namespace CleanRepo
 
             if (searchOption == SearchOption.AllDirectories)
             {
-                //foreach (var subDirectory in dir.EnumerateDirectories("*", SearchOption.AllDirectories))
-                Parallel.ForEach(dir.EnumerateDirectories("*", SearchOption.AllDirectories), subDirectory =>
+                foreach (var subDirectory in dir.EnumerateDirectories("*", SearchOption.AllDirectories))
                 {
                     if (String.Compare(subDirectory.Name, "includes", true) == 0
                         || String.Compare(subDirectory.Name, "_shared", true) == 0)
@@ -284,7 +283,7 @@ namespace CleanRepo
                             includeFiles.Add(file.FullName.ToLower(), 0);
                         }
                     }
-                });
+                }
             }
 
             return includeFiles;
@@ -396,7 +395,7 @@ namespace CleanRepo
                     // Match "img src=" references
                     // Example: <img data-hoverimage="./images/getstarted.svg" src="./images/getstarted.png" alt="Get started icon" />
 
-                    string htmlImageRegEx = "<img[^>]*src[ ]*=[ ]*\"([^>]*.(png|gif|jpg)).*\".*>{1}?";
+                    string htmlImageRegEx = "<img[^>]*?src[ ]*=[ ]*\"([^>]*?.(png|gif|jpg))[ ]*\"";
                     foreach (Match match in Regex.Matches(line, htmlImageRegEx, RegexOptions.IgnoreCase))
                     {
                         string relativePath = match.Groups[1].Value.Trim();
@@ -553,16 +552,13 @@ namespace CleanRepo
 
         #region Orphaned topics
         /// <summary>
-        /// Lists the files that aren't referenced from a TOC file.
+        /// Lists the markdown files that aren't referenced from a TOC file.
         /// </summary>
         private static void ListOrphanedTopics(List<FileInfo> tocFiles, List<FileInfo> markdownFiles, bool deleteOrphanedTopics)
         {
-            var countNotFound = 0;
-            var countDeleted = 0;
-            var countNotDeleted = 0;
+            Dictionary<string, int> filesToKeep = new Dictionary<string, int>();
 
-            Console.WriteLine("\nTopics not in any TOC or Index file (that are also not includes or shared):\n\n");
-            var deleteOutput = new StringBuilder();
+            Console.WriteLine("\nTopics not in any TOC file (that are also not includes or shared):\n");
 
             bool IsTopicFile(FileInfo file) =>
                 !file.FullName.Contains("\\includes\\") &&
@@ -570,41 +566,48 @@ namespace CleanRepo
                 String.Compare(file.Name, "TOC.md", true) != 0 &&
                 String.Compare(file.Name, "index.md", true) != 0;
 
-            //foreach (var markdownFile in markdownFiles.Where(IsTopicFile))
+            List<FileInfo> orphanedFiles = new List<FileInfo>();
+
             Parallel.ForEach(markdownFiles.Where(IsTopicFile), markdownFile =>
             {
                 var found = tocFiles.Any(tocFile => IsFileLinkedFromTocFile(markdownFile, tocFile));
                 if (!found)
                 {
-                    ++countNotFound;
+                    orphanedFiles.Add(markdownFile);
                     Console.WriteLine(markdownFile.FullName);
-
-                    // Delete the file if the option is set.
-                    if (deleteOrphanedTopics)
-                    {
-                        // First check if the file is referenced from a non-TOC file.
-                        var isLinked =
-                            markdownFiles.Where(file => file != markdownFile)
-                                         .Any(otherMarkdownFile => IsFileLinkedFromFile(markdownFile, otherMarkdownFile));
-
-                        if (isLinked)
-                        {
-                            ++countNotDeleted;
-                            deleteOutput.AppendLine(markdownFile.FullName);
-                        }
-                        else
-                        {
-                            File.Delete(markdownFile.FullName);
-                            ++countDeleted;
-                        }
-                    }
                 }
             });
 
-            Console.WriteLine($"\nFound {countNotFound} .md files that aren't referenced in a TOC.");
-            if (countNotDeleted > 0)
+            Console.WriteLine($"\nFound {orphanedFiles.Count} .md files that aren't referenced in a TOC.");
+
+            // Delete files if the option is set.
+            if (deleteOrphanedTopics)
             {
-                Console.Write($"\nThe following {countNotDeleted} files were not deleted because they're referenced in another file:\n\n" + deleteOutput.ToString());
+                Parallel.ForEach(markdownFiles, linkingFile =>
+                {
+                    CheckFileLinks(orphanedFiles, linkingFile, ref filesToKeep);
+                });
+
+                // Delete files that aren't linked to.
+                foreach (var orphanedFile in orphanedFiles)
+                {
+                    if (!filesToKeep.ContainsKey(orphanedFile.FullName))
+                        File.Delete(orphanedFile.FullName);
+                }
+
+                if (filesToKeep.Count > 0)
+                {
+                    Console.Write($"\nThe following {filesToKeep.Count} files *were not deleted* " +
+                        $"because they're referenced in one or more files:\n\n");
+                    foreach (var fileName in filesToKeep)
+                    {
+                        Console.WriteLine(fileName);
+                    }
+                }
+                else
+                {
+                    Console.WriteLine($"\nDeleted {orphanedFiles.Count} files.");
+                }
             }
         }
 
@@ -662,6 +665,80 @@ namespace CleanRepo
 
             // We did not find this file linked in the specified file.
             return false;
+        }
+
+        /// <summary>
+        /// If linkingFile contains a link to any file in linkedFiles, add the file to filesToKeep.
+        /// </summary>
+        private static void CheckFileLinks(List<FileInfo> linkedFiles, FileInfo linkingFile, ref Dictionary<string, int> filesToKeep)
+        {
+            if (!File.Exists(linkingFile.FullName))
+            {
+                return;
+            }
+
+            string fileContents = File.ReadAllText(linkingFile.FullName);
+
+            // Example links .yml/.md:
+            // href: ide/managing-external-tools.md
+            // [Managing External Tools](ide/managing-external-tools.md)
+
+            foreach (var linkedFile in linkedFiles)
+            {
+                string linkRegEx = linkingFile.Extension.ToLower() == ".yml" ?
+                        @"href:(.*?" + linkedFile.Name + ")" :
+                        @"\]\((?!http)(([^\)])*?" + linkedFile.Name + @")";
+
+                // For each link that contains the file name...
+                foreach (Match match in Regex.Matches(fileContents, linkRegEx, RegexOptions.IgnoreCase))
+                {
+                    // Get the file-relative path to the linked file.
+                    string relativePath = match.Groups[1].Value.Trim();
+
+                    // Remove any quotation marks
+                    relativePath = relativePath.Replace("\"", "");
+
+                    if (relativePath != null)
+                    {
+                        string fullPath;
+                        try
+                        {
+                            // Construct the full path to the referenced file
+                            fullPath = Path.Combine(linkingFile.DirectoryName, relativePath);
+                        }
+                        catch (ArgumentException e)
+                        {
+                            Console.WriteLine($"\nCaught exception while constructing full path " +
+                                $"for '{relativePath}' in '{linkingFile.FullName}': {e.Message}");
+                            throw;
+                        }
+
+                        // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
+                        fullPath = Path.GetFullPath(fullPath);
+                        if (fullPath != null)
+                        {
+                            // See if our constructed path matches the actual file we think it is
+                            if (String.Compare(fullPath, linkedFile.FullName, true) == 0)
+                            {
+                                // File is linked from another file.
+                                if (filesToKeep.ContainsKey(linkedFile.FullName))
+                                {
+                                    // Increment the count of links to this file.
+                                    filesToKeep[linkedFile.FullName]++;
+                                }
+                                else
+                                {
+                                    filesToKeep.Add(linkedFile.FullName, 1);
+                                }
+                            }
+                            else
+                            {
+                                // This link did not match the full file name.
+                            }
+                        }
+                    }
+                }
+            }
         }
         #endregion
 
@@ -806,7 +883,6 @@ namespace CleanRepo
                                 File.WriteAllText(linkingFile.FullName, newText);
                             }
                         }
-
                     }
                 }
 
