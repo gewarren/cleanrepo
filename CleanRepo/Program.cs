@@ -394,6 +394,7 @@ namespace CleanRepo
 
                     // Match "img src=" references
                     // Example: <img data-hoverimage="./images/getstarted.svg" src="./images/getstarted.png" alt="Get started icon" />
+                    // Example: <img style="display: none;" alt="Anaconda" src="_img/index/logo_anaconda.png" data-linktype="external" data-hoverimage="_img/index/logo_anaconda.png">
 
                     string htmlImageRegEx = "<img[^>]*?src[ ]*=[ ]*\"([^>]*?.(png|gif|jpg))[ ]*\"";
                     foreach (Match match in Regex.Matches(line, htmlImageRegEx, RegexOptions.IgnoreCase))
