@@ -986,8 +986,18 @@ namespace CleanRepo
                     // Remove any quotation marks
                     relativePath = relativePath.Replace("\"", "");
 
-                    // Construct the full path to the linked file.
-                    string fullPath = Path.Combine(linkingFile.DirectoryName, relativePath);
+                    string fullPath = null;
+                    try
+                    {
+                        // Construct the full path to the linked file.
+                        fullPath = Path.Combine(linkingFile.DirectoryName, relativePath);
+                    }
+                    catch (ArgumentException)
+                    {
+                        Console.WriteLine($"Ignoring the link {relativePath} due to possibly invalid format.\n");
+                        continue;
+                    }
+
                     // Clean up the path by replacing forward slashes with back slashes, removing extra dots, etc.
                     try
                     {
