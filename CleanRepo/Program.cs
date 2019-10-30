@@ -1012,9 +1012,9 @@ namespace CleanRepo
                             {
                                 string redirectURL = redirectLookup[fullPath].redirect_url;
 
-                                output.AppendLine($"REPLACING '{relativePath}' with '{redirectURL}'.");
+                                output.AppendLine($"REPLACING '({relativePath})' with '({redirectURL})'.");
 
-                                string newText = text.Replace(relativePath, redirectURL);
+                                string newText = text.Replace($"]({relativePath})", $"]({redirectURL})");
                                 File.WriteAllText(linkingFile.FullName, newText);
                             }
                         }
