@@ -9,31 +9,40 @@ namespace CleanRepo
         [Option('d', "directory", Required = true, HelpText = "Directory to start search for markdown files, or the media directory to search in for orphaned .png/.gif/.jpg files, or the directory to search in for orphaned INCLUDE files.")]
         public string InputDirectory { get; set; }
 
-        [Option('o', "orphaned_topics", HelpText = "Use this option to find orphaned topics.")]
+        [Option('o', "orphaned-topics", HelpText = "Use this option to find orphaned topics.")]
         public bool FindOrphanedTopics { get; set; }
 
         [Option('m', "multiples", HelpText = "Use this option to find topics that appear more than once in one or separate TOC.md files.")]
         public bool FindMultiples { get; set; }
 
-        [Option('p', "orphaned_images", HelpText = "Use this option to find orphaned .png, .gif, or .jpg files.")]
+        [Option('p', "orphaned-images", HelpText = "Find orphaned .png, .gif, or .jpg files.")]
         public bool FindOrphanedImages { get; set; }
 
-        [Option('i', "orphaned_includes", HelpText = "Use this option to find orphaned INCLUDE files.")]
+        [Option('i', "orphaned-includes", HelpText = "Find orphaned INCLUDE files.")]
         public bool FindOrphanedIncludes { get; set; }
 
-        [Option('g', "delete", DefaultValue = false, Required = false, HelpText = "Set to true to delete orphaned markdown or .png/.jpg/.gif files.")]
+        [Option('g', "delete", DefaultValue = false, Required = false, HelpText = "Delete orphaned markdown or .png/.jpg/.gif files.")]
         public bool Delete { get; set; }
 
-        [Option('l', "redirects", Required = false, HelpText = "Finds backlinks to redirected files in the specified directory.")]
+        [Option('l', "redirects", Required = false, HelpText = "Find backlink to redirected files in the specified directory.")]
         public bool FindRedirectedTopicLinks { get; set; }
 
-        [Option('r', "replace_redirects", DefaultValue = false, Required = false, HelpText = "Set to true to replace links to redirected files with their target URL.")]
+        [Option('r', "replace-redirects", DefaultValue = false, Required = false, HelpText = "Replace links to redirected files with their target URL.")]
         public bool ReplaceLinks { get; set; }
 
-        [Option('f', "redirects_file", Required = false, HelpText = "Optionally specify a path to a redirect JSON file in a different repo.")]
+        [Option('f', "redirects-file", Required = false, HelpText = "Optionally specify a path to a redirect JSON file in a different repo.")]
         public string RedirectsFile { get; set; }
 
-        [Option('s', "recursive", DefaultValue = true, Required = false, HelpText = "Search directory and all subdirectories.")]
+        [Option("relative-links", HelpText = "Replace site-relative links with file-relative links. You must also specify the docset name for the repo.")]
+        public bool ReplaceWithRelativeLinks { get; set; }
+
+        [Option("docset-name", Required = false, HelpText = "The docset name that corresponds to the root of this repo in a URL, e.g. 'visualstudio' in 'http://docs.microsoft.com/visualstudio/ide/get-started'.")]
+        public string DocsetName { get; set; }
+
+        [Option("docset-root", Required = false, HelpText = "The full path to the root directory for the docset, e.g. 'c:\\users\\gewarren\\dotnet-docs\\docs'.")]
+        public string DocsetRoot { get; set; }
+
+        [Option('s', "recursive", DefaultValue = true, Required = false, HelpText = "Search directory and all subdirectories for markdown, yaml, image, and include files (depending on chosen function).")]
         public bool SearchRecursively { get; set; }
 
         [ParserState]

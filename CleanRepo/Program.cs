@@ -136,6 +136,30 @@ namespace CleanRepo
 
                     Console.WriteLine("DONE");
                 }
+                // Replace site-relative links to *this* repo with file-relative links
+                else if (options.ReplaceWithRelativeLinks)
+                {
+                    if (String.IsNullOrEmpty(options.DocsetName))
+                    {
+                        Console.WriteLine("You must specify the docset name for this repo when replacing site-relative links.");
+                        return;
+                    }
+                    if (String.IsNullOrEmpty(options.DocsetRoot))
+                    {
+                        Console.WriteLine("You must specify the docset root for this repo when replacing site-relative links.");
+                        return;
+                    }
+
+                    Console.WriteLine($"\nReplacing site-relative links to '/{options.DocsetName}/' in " +
+                        $"the '{options.InputDirectory}' directory with file-relative links.\n");
+
+                    // Get all the markdown and YAML files.
+                    List<FileInfo> linkingFiles = GetMarkdownFiles(options.InputDirectory, options.SearchRecursively);
+                    linkingFiles.AddRange(GetYAMLFiles(options.InputDirectory, options.SearchRecursively));
+
+                    // Check all links in these files.
+                    ReplaceLinks(linkingFiles, options.DocsetName, options.DocsetRoot);
+                }
 
                 stopwatch.Stop();
                 Console.WriteLine($"\nElapsed time: {stopwatch.Elapsed.ToHumanReadableString()}");
@@ -145,6 +169,108 @@ namespace CleanRepo
                 //Console.ReadLine();
             }
         }
+
+        #region Replace site-relative links
+        private static void ReplaceLinks(List<FileInfo> linkingFiles, string docsetName, string rootDirectory)
+        {
+            foreach (var linkingFile in linkingFiles)
+            {
+                // Find links that look like [link text](/docsetName/some other text)
+                string pattern = @"\]\(/" + docsetName + @"/([^\)]*)\)";
+
+                // Read the whole file up front because we might change the file mid-flight.
+                string originalFileText = File.ReadAllText(linkingFile.FullName);
+
+                foreach (Match match in Regex.Matches(originalFileText, pattern, RegexOptions.IgnoreCase))
+                {
+                    // Get the first capture group, which is the part of the path after the docset name.
+                    string siteRelativePath = match.Groups[1].Value;
+
+                    // If the path contains a ?, ignore this link as replacing it might not be ideal.
+                    if (siteRelativePath.IndexOf('?') >= 0)
+                        continue;
+
+                    // Build an absolute path to this file.
+                    string absolutePath = Path.Combine(rootDirectory, siteRelativePath.Trim() + ".md");
+
+                    // Clean up the path by replacing forward slashes with back slashes, removing extra dots, etc.
+                    absolutePath = Path.GetFullPath(absolutePath);
+
+                    // Check that the link is valid in the local repo.
+                    if (!File.Exists(absolutePath))
+                    {
+                        continue;
+                    }
+
+                    if (absolutePath != null)
+                    {
+                        // Determine the file-relative path to absolutePath.
+                        string fileRelativePath = GetFileRelativePath(linkingFile.FullName, absolutePath);
+
+                        if (fileRelativePath != null)
+                        {
+                            // Replace the link.
+                            Console.WriteLine($"Replacing '/{docsetName}/{siteRelativePath}' link with '{fileRelativePath}' in file '{linkingFile.FullName}'.");
+
+                            // If a previous link was found and replace, the text may have changed.
+                            string currentFileText = File.ReadAllText(linkingFile.FullName);
+
+                            string newText = currentFileText.Replace($"](/{docsetName}/{siteRelativePath})", $"]({fileRelativePath})");
+                            File.WriteAllText(linkingFile.FullName, newText);
+                        }
+                    }
+                }
+            }
+        }
+
+        private static string GetFileRelativePath(string linkingFilePath, string linkedFilePath)
+        {
+            string[] linkingFileDirs = linkingFilePath.Split('\\');
+            string[] linkedFileDirs = linkedFilePath.Split('\\');
+
+            // Get the shortest of the two paths.
+            int len = linkingFileDirs.Length < linkedFileDirs.Length ? linkingFileDirs.Length : linkedFileDirs.Length;
+
+            // Variables used to determine where in the loop we exit.
+            int lastCommonRoot = -1;
+            int index;
+
+            // Find common root of the two file paths.
+            for (index = 0; index < len; index++)
+            {
+                if (linkingFileDirs[index] == linkedFileDirs[index])
+                    lastCommonRoot = index;
+                else break;
+            }
+
+            // If we didn't find a common prefix, return null.
+            if (lastCommonRoot == -1)
+            {
+                return null;
+            }
+
+            // Build up the relative path.
+            StringBuilder relativePath = new StringBuilder();
+
+            // Add on the ..\
+            for (index = lastCommonRoot + 1; index < linkingFileDirs.Length - 1; index++)
+            {
+                if (linkingFileDirs[index].Length > 0)
+                    relativePath.Append("../");
+            }
+
+            // Add on the folders.
+            for (index = lastCommonRoot + 1; index < linkedFileDirs.Length - 1; index++)
+            {
+                relativePath.Append(linkedFileDirs[index] + "/");
+            }
+
+            // Add the file name.
+            relativePath.Append(linkedFileDirs[linkedFileDirs.Length - 1]);
+
+            return relativePath.ToString();
+        }
+        #endregion
 
         #region Orphaned includes
         /// TODO: Improve the perf of this method using the following pseudo code:
