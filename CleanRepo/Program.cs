@@ -101,8 +101,16 @@ namespace CleanRepo
                 {
                     Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory for links to redirected topics...\n");
 
-                    // Find the .openpublishing.redirection.json file for the directory
-                    FileInfo redirectsFile = GetRedirectsFile(options.InputDirectory);
+                    FileInfo redirectsFile = null;
+                    if (String.IsNullOrEmpty(options.RedirectsFile))
+                    {
+                        // Find the .openpublishing.redirection.json file for the directory
+                        redirectsFile = GetRedirectsFile(options.InputDirectory);
+                    }
+                    else
+                    {
+                        redirectsFile = new FileInfo(options.RedirectsFile);
+                    }
 
                     if (redirectsFile == null)
                     {
@@ -850,7 +858,7 @@ namespace CleanRepo
                     string relativePath = match.Groups[1].Value.Trim();
 
                     // Remove any quotation marks
-                    text = text.Replace("\"", "");
+                    relativePath = relativePath.Replace("\"", "");
 
                     // Construct the full path to the linked file.
                     string fullPath = Path.Combine(linkingFile.DirectoryName, relativePath);

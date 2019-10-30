@@ -30,6 +30,9 @@ namespace CleanRepo
         [Option('r', "replace_redirects", DefaultValue = false, Required = false, HelpText = "Set to true to replace links to redirected files with their target URL.")]
         public bool ReplaceLinks { get; set; }
 
+        [Option('f', "redirects_file", Required = false, HelpText = "Optionally specify a path to a redirect JSON file in a different repo.")]
+        public string RedirectsFile { get; set; }
+
         [Option('s', "recursive", DefaultValue = true, Required = false, HelpText = "Search directory and all subdirectories.")]
         public bool SearchRecursively { get; set; }
 
