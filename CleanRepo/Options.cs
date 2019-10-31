@@ -24,6 +24,9 @@ namespace CleanRepo
         [Option('g', "delete", DefaultValue = false, Required = false, HelpText = "Delete orphaned markdown or .png/.jpg/.gif files.")]
         public bool Delete { get; set; }
 
+        [Option("clean-redirects", Required = false, HelpText = "Clean redirection JSON file by replacing targets that are themselves redirected.")]
+        public bool CleanRedirectionFile { get; set; }
+
         [Option("replace-redirects", Required = false, HelpText = "Find backlink to redirected files and replace with new target.")]
         public bool ReplaceRedirectTargets { get; set; }
 

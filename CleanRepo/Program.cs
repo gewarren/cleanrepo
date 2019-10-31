@@ -96,9 +96,47 @@ namespace CleanRepo
 
                     ListOrphanedIncludes(options.InputDirectory, includeFiles, options.Delete);
                 }
+                else if (options.CleanRedirectionFile)
+                {
+                    FileInfo redirectsFile = null;
+                    if (String.IsNullOrEmpty(options.RedirectsFile))
+                    {
+                        // Find the .openpublishing.redirection.json file for the directory
+                        redirectsFile = GetRedirectsFile(options.InputDirectory);
+                    }
+                    else
+                    {
+                        redirectsFile = new FileInfo(options.RedirectsFile);
+                    }
+
+                    if (redirectsFile == null)
+                    {
+                        Console.WriteLine($"Could not find redirects file for directory '{options.InputDirectory}'.");
+                        return;
+                    }
+
+                    if (String.IsNullOrEmpty(options.DocsetName) || String.IsNullOrEmpty(options.DocsetRoot))
+                    {
+                        Console.WriteLine("You must specify a docset name, e.g. dotnet, and a docset root, e.g. c:\\repos\\dotnet-docs.");
+                        return;
+                    }
+
+                    DirectoryInfo dirInfo = new DirectoryInfo(options.DocsetRoot);
+                    string docsetRootFolder = dirInfo.Name;
+
+                    Console.WriteLine($"\nCleaning the '{redirectsFile.FullName}' redirection file.\n");
+                    CleanRedirectsFile(redirectsFile, options.DocsetName, docsetRootFolder);
+                }
                 // Find links to topics in the central redirect file
                 else if (options.ReplaceRedirectTargets)
                 {
+                    Console.WriteLine("\nIt's highly recommended to run the --clean-redirects option before replacing redirect links. Do you want to continue? y or n");
+                    var info = Console.ReadKey();
+                    if (info.KeyChar != 'y' && info.KeyChar != 'Y')
+                    {
+                        return;
+                    }
+
                     Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory for links to redirected topics...\n");
 
                     FileInfo redirectsFile = null;
@@ -911,6 +949,12 @@ namespace CleanRepo
             }
         }
 
+        private static void WriteRedirectJson(FileInfo redirectsFile, List<Redirect> redirects)
+        {
+            string json = JsonConvert.SerializeObject(redirects);
+            File.WriteAllText(redirectsFile.FullName, json);
+        }
+
         private static List<Redirect> LoadRedirectJson(FileInfo redirectsFile)
         {
             using (StreamReader reader = new StreamReader(redirectsFile.FullName))
@@ -932,6 +976,53 @@ namespace CleanRepo
                     return null;
                 }
             }
+        }
+
+        /// <summary>
+        /// For each target URL, see if it's a source_path somewhere else.
+        /// If so, replace the original target URL with the new target URL.
+        /// </summary>
+        private static void CleanRedirectsFile(FileInfo redirectsFile, string docsetName, string docsetRootFolderName)
+        {
+            List<Redirect> redirects = LoadRedirectJson(redirectsFile);
+            string fileText = File.ReadAllText(redirectsFile.FullName);
+
+            if (redirects is null)
+            {
+                return;
+            }
+
+            // Load the sources and targets into a dictionary.
+            Dictionary<string, string> redirectsLookup = new Dictionary<string, string>(redirects.Count);
+
+            foreach (Redirect redirect in redirects)
+            {
+                redirectsLookup.Add(redirect.source_path, redirect.redirect_url);
+            }
+
+            foreach (var redirectPair in redirectsLookup)
+            {
+                string currentTarget = redirectPair.Value;
+
+                // Put the URL into the same format as source_path
+                string normalizedTargetPath = docsetRootFolderName + redirectPair.Value.Remove(0, docsetName.Length + 1) + ".md";
+
+                while (redirectsLookup.ContainsKey(normalizedTargetPath))
+                {
+                    currentTarget = redirectsLookup[normalizedTargetPath];
+                    normalizedTargetPath = docsetRootFolderName + currentTarget.Remove(0, docsetName.Length + 1) + ".md";
+                }
+
+                if (currentTarget != redirectPair.Value)
+                {
+                    Console.WriteLine($"Replacing target URL '{redirectPair.Value}' with '{currentTarget}'.");
+
+                    fileText = fileText.Replace($"\"redirect_url\": \"{redirectPair.Value}\"", $"\"redirect_url\": \"{currentTarget}\"");
+                }
+            }
+
+            // Write the redirects back to the file.
+            File.WriteAllText(redirectsFile.FullName, fileText);
         }
 
         private static List<Redirect> GetAllRedirectedFiles(FileInfo redirectsFile)
@@ -977,20 +1068,20 @@ namespace CleanRepo
                     @"href:(.*\.md)" :
                     @"\]\((?!http)([^\)]*\.md)\)";
 
-                // For each link in the file...
-                foreach (Match match in Regex.Matches(text, linkRegEx, RegexOptions.IgnoreCase))
+            // For each link in the file...
+            foreach (Match match in Regex.Matches(text, linkRegEx, RegexOptions.IgnoreCase))
                 {
-                    // Get the file-relative path to the linked file.
-                    string relativePath = match.Groups[1].Value.Trim();
+                // Get the file-relative path to the linked file.
+                string relativePath = match.Groups[1].Value.Trim();
 
-                    // Remove any quotation marks
-                    relativePath = relativePath.Replace("\"", "");
+                // Remove any quotation marks
+                relativePath = relativePath.Replace("\"", "");
 
                     string fullPath = null;
                     try
                     {
-                        // Construct the full path to the linked file.
-                        fullPath = Path.Combine(linkingFile.DirectoryName, relativePath);
+                    // Construct the full path to the linked file.
+                    fullPath = Path.Combine(linkingFile.DirectoryName, relativePath);
                     }
                     catch (ArgumentException)
                     {
@@ -998,8 +1089,8 @@ namespace CleanRepo
                         continue;
                     }
 
-                    // Clean up the path by replacing forward slashes with back slashes, removing extra dots, etc.
-                    try
+                // Clean up the path by replacing forward slashes with back slashes, removing extra dots, etc.
+                try
                     {
                         fullPath = Path.GetFullPath(fullPath);
                     }
@@ -1011,14 +1102,14 @@ namespace CleanRepo
 
                     if (fullPath != null)
                     {
-                        // See if our constructed path matches a source file in the dictionary of redirects.
-                        if (redirectLookup.ContainsKey(fullPath))
+                    // See if our constructed path matches a source file in the dictionary of redirects.
+                    if (redirectLookup.ContainsKey(fullPath))
                         {
                             foundOldLink = true;
                             output.AppendLine($"'{relativePath}'");
 
-                            // Replace the link.
-                            string redirectURL = redirectLookup[fullPath].redirect_url;
+                        // Replace the link.
+                        string redirectURL = redirectLookup[fullPath].redirect_url;
 
                             output.AppendLine($"REPLACING '({relativePath})' with '({redirectURL})'.");
 
