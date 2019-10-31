@@ -97,7 +97,7 @@ namespace CleanRepo
                     ListOrphanedIncludes(options.InputDirectory, includeFiles, options.Delete);
                 }
                 // Find links to topics in the central redirect file
-                else if (options.FindRedirectedTopicLinks)
+                else if (options.ReplaceRedirectTargets)
                 {
                     Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory for links to redirected topics...\n");
 
@@ -131,8 +131,8 @@ namespace CleanRepo
                     linkingFiles.AddRange(GetYAMLFiles(options.InputDirectory, options.SearchRecursively));
 
                     // Check all links, including in toc.yml, to files in the redirects list.
-                    // Report links to redirected files and optionally replace them.
-                    FindRedirectLinks(redirects, linkingFiles, options.ReplaceLinks);
+                    // Replace links to redirected files.
+                    FindRedirectLinks(redirects, linkingFiles);
 
                     Console.WriteLine("DONE");
                 }
@@ -960,7 +960,7 @@ namespace CleanRepo
             return redirects;
         }
 
-        private static void FindRedirectLinks(List<Redirect> redirects, List<FileInfo> linkingFiles, bool replaceLinks)
+        private static void FindRedirectLinks(List<Redirect> redirects, List<FileInfo> linkingFiles)
         {
             Dictionary<string, Redirect> redirectLookup = Enumerable.ToDictionary<Redirect, string>(redirects, r => r.source_path);
 
@@ -1017,16 +1017,13 @@ namespace CleanRepo
                             foundOldLink = true;
                             output.AppendLine($"'{relativePath}'");
 
-                            // Replace the link if requested.
-                            if (replaceLinks)
-                            {
-                                string redirectURL = redirectLookup[fullPath].redirect_url;
+                            // Replace the link.
+                            string redirectURL = redirectLookup[fullPath].redirect_url;
 
-                                output.AppendLine($"REPLACING '({relativePath})' with '({redirectURL})'.");
+                            output.AppendLine($"REPLACING '({relativePath})' with '({redirectURL})'.");
 
-                                string newText = text.Replace($"]({relativePath})", $"]({redirectURL})");
-                                File.WriteAllText(linkingFile.FullName, newText);
-                            }
+                            string newText = text.Replace($"]({relativePath})", $"]({redirectURL})");
+                            File.WriteAllText(linkingFile.FullName, newText);
                         }
                     }
                 }

@@ -9,28 +9,25 @@ namespace CleanRepo
         [Option('d', "directory", Required = true, HelpText = "Directory to start search for markdown files, or the media directory to search in for orphaned .png/.gif/.jpg files, or the directory to search in for orphaned INCLUDE files.")]
         public string InputDirectory { get; set; }
 
-        [Option('o', "orphaned-topics", HelpText = "Use this option to find orphaned topics.")]
+        [Option("orphaned-topics", HelpText = "Use this option to find orphaned topics.")]
         public bool FindOrphanedTopics { get; set; }
 
-        [Option('m', "multiples", HelpText = "Use this option to find topics that appear more than once in one or separate TOC.md files.")]
+        [Option("multiples", HelpText = "Use this option to find topics that appear more than once in one or separate TOC.md files.")]
         public bool FindMultiples { get; set; }
 
-        [Option('p', "orphaned-images", HelpText = "Find orphaned .png, .gif, or .jpg files.")]
+        [Option("orphaned-images", HelpText = "Find orphaned .png, .gif, or .jpg files.")]
         public bool FindOrphanedImages { get; set; }
 
-        [Option('i', "orphaned-includes", HelpText = "Find orphaned INCLUDE files.")]
+        [Option("orphaned-includes", HelpText = "Find orphaned INCLUDE files.")]
         public bool FindOrphanedIncludes { get; set; }
 
         [Option('g', "delete", DefaultValue = false, Required = false, HelpText = "Delete orphaned markdown or .png/.jpg/.gif files.")]
         public bool Delete { get; set; }
 
-        [Option('l', "redirects", Required = false, HelpText = "Find backlink to redirected files in the specified directory.")]
-        public bool FindRedirectedTopicLinks { get; set; }
+        [Option("replace-redirects", Required = false, HelpText = "Find backlink to redirected files and replace with new target.")]
+        public bool ReplaceRedirectTargets { get; set; }
 
-        [Option('r', "replace-redirects", DefaultValue = false, Required = false, HelpText = "Replace links to redirected files with their target URL.")]
-        public bool ReplaceLinks { get; set; }
-
-        [Option('f', "redirects-file", Required = false, HelpText = "Optionally specify a path to a redirect JSON file in a different repo.")]
+        [Option("redirects-file", Required = false, HelpText = "Optionally specify a path to a redirect JSON file in a different repo.")]
         public string RedirectsFile { get; set; }
 
         [Option("relative-links", HelpText = "Replace site-relative links with file-relative links. You must also specify the docset name for the repo.")]
