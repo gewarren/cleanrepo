@@ -992,9 +992,8 @@ namespace CleanRepo
                 return;
             }
 
-            // Load the sources and targets into a dictionary.
+            // Load the sources and targets into a dictionary for easier look up.
             Dictionary<string, string> redirectsLookup = new Dictionary<string, string>(redirects.Count);
-
             foreach (Redirect redirect in redirects)
             {
                 redirectsLookup.Add(redirect.source_path, redirect.redirect_url);
@@ -1004,12 +1003,32 @@ namespace CleanRepo
             {
                 string currentTarget = redirectPair.Value;
 
+                if (!redirectPair.Value.StartsWith("/" + docsetName + "/"))
+                {
+                    // Redirect URL is in a different docset/repo, so ignore it.
+                    continue;
+                }
+
                 // Put the URL into the same format as source_path
                 string normalizedTargetPath = docsetRootFolderName + redirectPair.Value.Remove(0, docsetName.Length + 1) + ".md";
 
                 while (redirectsLookup.ContainsKey(normalizedTargetPath))
                 {
+                    // Avoid an infinite loop by checking that this isn't the same key/value pair.
+                    if (String.Equals(redirectsLookup[normalizedTargetPath], currentTarget))
+                    {
+                        Console.WriteLine($"\nWARNING: {normalizedTargetPath} REDIRECTS TO ITSELF. PLEASE FIND A DIFFERENT REDIRECT URL.\n");
+                        break;
+                    }
+
                     currentTarget = redirectsLookup[normalizedTargetPath];
+
+                    if (!currentTarget.StartsWith("/" + docsetName + "/"))
+                    {
+                        // Redirect URL is in a different docset/repo, so stop looking for further targets.
+                        break;
+                    }
+
                     normalizedTargetPath = docsetRootFolderName + currentTarget.Remove(0, docsetName.Length + 1) + ".md";
                 }
 
