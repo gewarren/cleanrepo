@@ -12,10 +12,8 @@ This command-line tool helps you clean up a DocFx-based content repo. It can:
 
 ## Usage
 
-  -d, --directory        Required. Directory to start search for markdown
-                         files, or the media directory to search in for
-                         orphaned .png/.gif/.jpg files, or the directory to
-                         search in for orphaned INCLUDE files.
+  -d, --directory        Top-level directory in which to perform clean up (for
+                         example, find orphaned markdown files).
 
   --orphaned-topics      Use this option to find orphaned topics.
 
@@ -84,7 +82,7 @@ CleanRepo.exe --orphaned-includes -g -d c:\repos\visualstudio-docs-pr\docs\ide
 Clean the .openpublishing.redirection.json file by replacing any redirect URLs with their respective redirect URL, if it exists:
 
 ```
-CleanRepo.exe --clean-redirects --docset-name visualstudio --docset-root c:\repos\visualstudio-docs-pr\docs -d c:\repos\visualstudio-docs-pr\docs\ide
+CleanRepo.exe --clean-redirects --docset-name visualstudio --docset-root c:\repos\visualstudio-docs-pr\docs
 ```
 
 Find topics with backlinks to redirected topics and replace the links with their target URL:
