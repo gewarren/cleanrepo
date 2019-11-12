@@ -6,7 +6,7 @@ namespace CleanRepo
     // Define a class to receive parsed values
     class Options
     {
-        [Option('d', "directory", Required = true, HelpText = "Directory to start search for markdown files, or the media directory to search in for orphaned .png/.gif/.jpg files, or the directory to search in for orphaned INCLUDE files.")]
+        [Option('d', "directory", HelpText = "Top-level directory in which to perform clean up (for example, find orphaned markdown files).")]
         public string InputDirectory { get; set; }
 
         [Option("orphaned-topics", HelpText = "Use this option to find orphaned topics.")]

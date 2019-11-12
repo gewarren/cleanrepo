@@ -22,19 +22,18 @@ namespace CleanRepo
             var parsedArgs = CommandLine.Parser.Default.ParseArguments(args, options);
             if (parsedArgs)
             {
-                // Verify that the input directory exists.
-                if (!Directory.Exists(options.InputDirectory))
-                {
-                    Console.WriteLine($"\nDirectory '{options.InputDirectory}' does not exist.");
-                    return;
-                }
-
                 var stopwatch = new Stopwatch();
                 stopwatch.Start();
 
                 // Find orphaned topics
                 if (options.FindOrphanedTopics)
                 {
+                    if (String.IsNullOrEmpty(options.InputDirectory) || !Directory.Exists(options.InputDirectory))
+                    {
+                        Console.WriteLine("\nYou must specify a valid top-level directory in which to perform the clean up, e.g. c:\\repos\\dotnet-docs\\docs.");
+                        return;
+                    }
+
                     Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory and its subdirectories for orphaned topics...");
 
                     List<FileInfo> tocFiles = GetTocFiles(options.InputDirectory);
@@ -50,6 +49,12 @@ namespace CleanRepo
                 // Find topics referenced multiple times
                 else if (options.FindMultiples)
                 {
+                    if (String.IsNullOrEmpty(options.InputDirectory) || !Directory.Exists(options.InputDirectory))
+                    {
+                        Console.WriteLine("\nYou must specify a valid top-level directory in which to perform the clean up, e.g. c:\\repos\\dotnet-docs\\docs.");
+                        return;
+                    }
+
                     Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory and its subdirectories for " +
                         $"topics that appear more than once in one or more TOC files...\n");
 
@@ -66,6 +71,12 @@ namespace CleanRepo
                 // Find orphaned images
                 else if (options.FindOrphanedImages)
                 {
+                    if (String.IsNullOrEmpty(options.InputDirectory) || !Directory.Exists(options.InputDirectory))
+                    {
+                        Console.WriteLine("\nYou must specify a valid top-level directory in which to perform the clean up, e.g. c:\\repos\\dotnet-docs\\docs.");
+                        return;
+                    }
+
                     string recursive = options.SearchRecursively ? "recursively " : "";
                     Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory {recursive}for orphaned .png/.jpg/.gif files...\n");
 
@@ -82,6 +93,12 @@ namespace CleanRepo
                 // Find orphaned include-type files
                 else if (options.FindOrphanedIncludes)
                 {
+                    if (String.IsNullOrEmpty(options.InputDirectory) || !Directory.Exists(options.InputDirectory))
+                    {
+                        Console.WriteLine("\nYou must specify a valid top-level directory in which to perform the clean up, e.g. c:\\repos\\dotnet-docs\\docs.");
+                        return;
+                    }
+
                     string recursive = options.SearchRecursively ? "recursively " : "";
                     Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory {recursive}for orphaned .md files " +
                         $"in directories named 'includes' or '_shared'.");
@@ -98,11 +115,22 @@ namespace CleanRepo
                 }
                 else if (options.CleanRedirectionFile)
                 {
+                    if (String.IsNullOrEmpty(options.DocsetName))
+                    {
+                        Console.WriteLine("\nYou must specify a docset name, e.g. dotnet.");
+                        return;
+                    }
+                    if (String.IsNullOrEmpty(options.DocsetRoot) || !Directory.Exists(options.DocsetRoot))
+                    {
+                        Console.WriteLine("\nYou must specify a valid docset root for this repo when replacing site-relative links.");
+                        return;
+                    }
+
                     FileInfo redirectsFile = null;
                     if (String.IsNullOrEmpty(options.RedirectsFile))
                     {
                         // Find the .openpublishing.redirection.json file for the directory
-                        redirectsFile = GetRedirectsFile(options.InputDirectory);
+                        redirectsFile = GetRedirectsFile(options.DocsetRoot);
                     }
                     else
                     {
@@ -111,16 +139,10 @@ namespace CleanRepo
 
                     if (redirectsFile == null)
                     {
-                        Console.WriteLine($"Could not find redirects file for directory '{options.InputDirectory}'.");
+                        Console.WriteLine($"\nCould not find redirects file for directory '{options.DocsetRoot}'.");
                         return;
                     }
-
-                    if (String.IsNullOrEmpty(options.DocsetName) || String.IsNullOrEmpty(options.DocsetRoot))
-                    {
-                        Console.WriteLine("You must specify a docset name, e.g. dotnet, and a docset root, e.g. c:\\repos\\dotnet-docs.");
-                        return;
-                    }
-
+                    
                     DirectoryInfo dirInfo = new DirectoryInfo(options.DocsetRoot);
                     string docsetRootFolder = dirInfo.Name;
 
@@ -130,6 +152,12 @@ namespace CleanRepo
                 // Find links to topics in the central redirect file
                 else if (options.ReplaceRedirectTargets)
                 {
+                    if (String.IsNullOrEmpty(options.InputDirectory) || !Directory.Exists(options.InputDirectory))
+                    {
+                        Console.WriteLine("\nYou must specify a valid top-level directory in which to perform the clean up, e.g. c:\\repos\\dotnet-docs\\docs.");
+                        return;
+                    }
+
                     Console.WriteLine("\nIt's highly recommended to run the --clean-redirects option before replacing redirect links. Do you want to continue? y or n");
                     var info = Console.ReadKey();
                     if (info.KeyChar != 'y' && info.KeyChar != 'Y')
@@ -152,7 +180,7 @@ namespace CleanRepo
 
                     if (redirectsFile == null)
                     {
-                        Console.WriteLine($"Could not find redirects file for directory '{options.InputDirectory}'.");
+                        Console.WriteLine($"\nCould not find redirects file for directory '{options.InputDirectory}'.");
                         return;
                     }
 
@@ -177,14 +205,19 @@ namespace CleanRepo
                 // Replace site-relative links to *this* repo with file-relative links
                 else if (options.ReplaceWithRelativeLinks)
                 {
-                    if (String.IsNullOrEmpty(options.DocsetName))
+                    if (String.IsNullOrEmpty(options.InputDirectory) || !Directory.Exists(options.InputDirectory))
                     {
-                        Console.WriteLine("You must specify the docset name for this repo when replacing site-relative links.");
+                        Console.WriteLine("\nYou must specify a valid top-level directory in which to perform the clean up, e.g. c:\\repos\\dotnet-docs\\docs.");
                         return;
                     }
-                    if (String.IsNullOrEmpty(options.DocsetRoot))
+                    if (String.IsNullOrEmpty(options.DocsetName))
                     {
-                        Console.WriteLine("You must specify the docset root for this repo when replacing site-relative links.");
+                        Console.WriteLine("\nYou must specify the docset name for this repo when replacing site-relative links.");
+                        return;
+                    }
+                    if (String.IsNullOrEmpty(options.DocsetRoot) || !Directory.Exists(options.DocsetRoot))
+                    {
+                        Console.WriteLine("\nYou must specify a valid docset root for this repo when replacing site-relative links.");
                         return;
                     }
 
@@ -197,6 +230,11 @@ namespace CleanRepo
 
                     // Check all links in these files.
                     ReplaceLinks(linkingFiles, options.DocsetName, options.DocsetRoot);
+                }
+                else
+                {
+                    Console.WriteLine("\nYou did not specify which function to perform.");
+                    return;
                 }
 
                 stopwatch.Stop();
