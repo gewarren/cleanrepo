@@ -78,13 +78,13 @@ namespace CleanRepo
                     }
 
                     string recursive = options.SearchRecursively ? "recursively " : "";
-                    Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory {recursive}for orphaned .png/.jpg/.gif files...\n");
+                    Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory {recursive}for orphaned .png/.jpg/.gif/.svg files...\n");
 
                     Dictionary<string, int> imageFiles = GetMediaFiles(options.InputDirectory, options.SearchRecursively);
 
                     if (imageFiles.Count == 0)
                     {
-                        Console.WriteLine("\nNo .png/.jpg/.gif files were found!");
+                        Console.WriteLine("\nNo .png/.jpg/.gif/.svg files were found!");
                         return;
                     }
 
@@ -122,7 +122,7 @@ namespace CleanRepo
                     }
                     if (String.IsNullOrEmpty(options.DocsetRoot) || !Directory.Exists(options.DocsetRoot))
                     {
-                        Console.WriteLine("\nYou must specify a valid docset root for this repo when replacing site-relative links.");
+                        Console.WriteLine("\nYou must specify a valid docset root for this repo when cleaning the redirection file.");
                         return;
                     }
 
@@ -547,7 +547,7 @@ namespace CleanRepo
                     */
 
                     // RegEx pattern to match
-                    string mdImageRegEx = @"\]\(([^\)]*?\.(png|jpg|gif))";
+                    string mdImageRegEx = @"\]\(([^\)]*?\.(png|jpg|gif|svg))";
 
                     // There could be more than one image reference on the line, hence the foreach loop.
                     foreach (Match match in Regex.Matches(line, mdImageRegEx, RegexOptions.IgnoreCase))
@@ -606,7 +606,7 @@ namespace CleanRepo
                     // Example: <img data-hoverimage="./images/getstarted.svg" src="./images/getstarted.png" alt="Get started icon" />
                     // Example: <img style="display: none;" alt="Anaconda" src="_img/index/logo_anaconda.png" data-linktype="external" data-hoverimage="_img/index/logo_anaconda.png">
 
-                    string htmlImageRegEx = "<img[^>]*?src[ ]*=[ ]*\"([^>]*?.(png|gif|jpg))[ ]*\"";
+                    string htmlImageRegEx = "<img[^>]*?src[ ]*=[ ]*\"([^>]*?.(png|gif|jpg|svg))[ ]*\"";
                     foreach (Match match in Regex.Matches(line, htmlImageRegEx, RegexOptions.IgnoreCase))
                     {
                         string relativePath = match.Groups[1].Value.Trim();
@@ -648,7 +648,7 @@ namespace CleanRepo
                     // Match reference-style image links
                     // Example: [0]: ../../media/vs-acr-provisioning-dialog-2019.png
 
-                    string referenceLinkRegEx = @"\[.*\]:(.*\.(png|gif|jpg))";
+                    string referenceLinkRegEx = @"\[.*\]:(.*\.(png|gif|jpg|svg))";
                     foreach (Match match in Regex.Matches(line, referenceLinkRegEx, RegexOptions.IgnoreCase))
                     {
                         string relativePath = match.Groups[1].Value.Trim();
@@ -712,7 +712,7 @@ namespace CleanRepo
 
             string deleted = deleteOrphanedImages ? "and deleted " : "";
 
-            Console.WriteLine($"\nFound {deleted}{count} orphaned .png/.jpg/.gif files:\n");
+            Console.WriteLine($"\nFound {deleted}{count} orphaned .png/.jpg/.gif/.svg files:\n");
             Console.WriteLine(output.ToString());
             Console.WriteLine("DONE");
         }
@@ -731,7 +731,7 @@ namespace CleanRepo
         }
 
         /// <summary>
-        /// Returns a dictionary of all .png/.jpg/.gif files in the directory.
+        /// Returns a dictionary of all .png/.jpg/.gif/.svg files in the directory.
         /// The search includes the specified directory and (optionally) all its subdirectories.
         /// </summary>
         private static Dictionary<string, int> GetMediaFiles(string mediaDirectory, bool searchRecursively = true)
@@ -753,6 +753,11 @@ namespace CleanRepo
             }
 
             foreach (var file in dir.EnumerateFiles("*.gif", searchOption))
+            {
+                mediaFiles.Add(file.FullName.ToLower(), 0);
+            }
+
+            foreach (var file in dir.EnumerateFiles("*.svg", searchOption))
             {
                 mediaFiles.Add(file.FullName.ToLower(), 0);
             }

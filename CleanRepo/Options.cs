@@ -15,13 +15,13 @@ namespace CleanRepo
         [Option("multiples", HelpText = "Use this option to find topics that appear more than once in one or separate TOC.md files.")]
         public bool FindMultiples { get; set; }
 
-        [Option("orphaned-images", HelpText = "Find orphaned .png, .gif, or .jpg files.")]
+        [Option("orphaned-images", HelpText = "Find orphaned .png, .gif, .jpg, or .svg files.")]
         public bool FindOrphanedImages { get; set; }
 
         [Option("orphaned-includes", HelpText = "Find orphaned INCLUDE files.")]
         public bool FindOrphanedIncludes { get; set; }
 
-        [Option('g', "delete", DefaultValue = false, Required = false, HelpText = "Delete orphaned markdown or .png/.jpg/.gif files.")]
+        [Option('g', "delete", DefaultValue = false, Required = false, HelpText = "Delete orphaned markdown or .png/.jpg/.gif/.svg files.")]
         public bool Delete { get; set; }
 
         [Option("clean-redirects", Required = false, HelpText = "Clean redirection JSON file by replacing targets that are themselves redirected.")]
