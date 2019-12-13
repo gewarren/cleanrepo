@@ -546,6 +546,7 @@ namespace CleanRepo
                     ![Architecture](./media/ci-cd-flask/Architecture.PNG?raw=true)
                     The Light Bulb icon ![Small Light Bulb Icon](media/vs2015_lightbulbsmall.png "VS2017_LightBulbSmall")
                     imageSrc: ./media/vs-mac-2019.svg
+                    :::image type="complex" source="./media/seedwork-classes.png" alt-text="Screenshot of the SeedWork folder.":::
                     *
                     * Does not currently support file names that contain parentheses:
                     * [VS image](../media/pic(azure)_1.png)
@@ -686,6 +687,37 @@ namespace CleanRepo
 
                     string imageSrcRegEx = @"imageSrc:([^:]*\.(png|gif|jpg|svg))";
                     foreach (Match match in Regex.Matches(line, imageSrcRegEx, RegexOptions.IgnoreCase))
+                    {
+                        string relativePath = match.Groups[1].Value.Trim();
+
+                        if (relativePath.StartsWith("/") || relativePath.StartsWith("http"))
+                        {
+                            // The file is in a different repo, so ignore it.
+                            continue;
+
+                            // TODO - For links that start with "/", check if they are in the same repo.
+                        }
+
+                        if (relativePath != null)
+                        {
+                            // Construct the full path to the referenced image file
+                            string fullPath = Path.Combine(file.DirectoryName, relativePath);
+
+                            // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
+                            fullPath = TryGetFullPath(fullPath);
+
+                            if (fullPath != null)
+                            {
+                                TryIncrementFile(fullPath, imageFiles);
+                            }
+                        }
+                    }
+
+                    // Match ::: image links
+                    // Example: :::image type="complex" source="./media/seedwork-classes.png" alt-text="Screenshot of SeedWork folder.":::
+
+                    string tripleColonRegEx = @":::image[^:]*source=""([^:]*\.(png|gif|jpg|svg))""[^:]*:::";
+                    foreach (Match match in Regex.Matches(line, tripleColonRegEx, RegexOptions.IgnoreCase))
                     {
                         string relativePath = match.Groups[1].Value.Trim();
 
