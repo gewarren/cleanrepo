@@ -503,7 +503,7 @@ namespace CleanRepo
         #region Orphaned images
         /// <summary>
         /// If any of the input image files are not
-        /// referenced from a markdown (.md) file anywhere in the docset, including up the directory 
+        /// referenced from a markdown (.md) or YAML (.yml) file anywhere in the docset, including up the directory 
         /// until the docfx.json file is found, the file path of those files is written to the console.
         /// </summary>
         /// TODO: Improve the perf of this method using the following pseudo code:
@@ -513,12 +513,16 @@ namespace CleanRepo
         ///          If found, BREAK to the next image
         private static void ListOrphanedImages(string inputDirectory, Dictionary<string, int> imageFiles, bool deleteOrphanedImages)
         {
+            // Get Markdown files
             var files = GetAllMarkdownFiles(inputDirectory, out DirectoryInfo rootDirectory);
 
             if (files is null)
             {
                 return;
             }
+
+            // Add YAML files
+            files.AddRange(GetAllYamlFiles(inputDirectory, out rootDirectory));
 
             void TryIncrementFile(string key, Dictionary<string, int> fileMap)
             {
@@ -529,10 +533,10 @@ namespace CleanRepo
             }
 
             // Gather up all the image references and increment the count for that image in the Dictionary.
-            //foreach (var markdownFile in files)
-            Parallel.ForEach(files, markdownFile =>
+            //foreach (var file in files)
+            Parallel.ForEach(files, file =>
             {
-                foreach (string line in File.ReadAllLines(markdownFile.FullName))
+                foreach (string line in File.ReadAllLines(file.FullName))
                 {
                     /* Support all of the following variations:
                     *
@@ -541,6 +545,7 @@ namespace CleanRepo
                     ![Unit Test Explorer showing Run All button](../test/media/unittestexplorer-beta-.png "UnitTestExplorer(beta)")
                     ![Architecture](./media/ci-cd-flask/Architecture.PNG?raw=true)
                     The Light Bulb icon ![Small Light Bulb Icon](media/vs2015_lightbulbsmall.png "VS2017_LightBulbSmall")
+                    imageSrc: ./media/vs-mac-2019.svg
                     *
                     * Does not currently support file names that contain parentheses:
                     * [VS image](../media/pic(azure)_1.png)
@@ -575,12 +580,12 @@ namespace CleanRepo
                                 }
                                 else
                                 {
-                                    fullPath = Path.Combine(markdownFile.DirectoryName, relativePath);
+                                    fullPath = Path.Combine(file.DirectoryName, relativePath);
                                 }
                             }
                             catch (ArgumentException)
                             {
-                                Console.WriteLine($"Possible bad image link '{match.Groups[0].Value}' in file '{markdownFile.FullName}'.\n");
+                                Console.WriteLine($"Possible bad image link '{match.Groups[0].Value}' in file '{file.FullName}'.\n");
                                 continue;
                             }
 
@@ -591,7 +596,7 @@ namespace CleanRepo
                             }
                             catch (ArgumentException)
                             {
-                                Console.WriteLine($"Possible bad image link '{match.Groups[0].Value}' in file '{markdownFile.FullName}'.\n");
+                                Console.WriteLine($"Possible bad image link '{match.Groups[0].Value}' in file '{file.FullName}'.\n");
                                 continue;
                             }
 
@@ -632,7 +637,7 @@ namespace CleanRepo
                             else
                             {
                                 // Construct the full path to the referenced image file
-                                fullPath = Path.Combine(markdownFile.DirectoryName, relativePath);
+                                fullPath = Path.Combine(file.DirectoryName, relativePath);
                             }
 
                             // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
@@ -664,7 +669,38 @@ namespace CleanRepo
                         if (relativePath != null)
                         {
                             // Construct the full path to the referenced image file
-                            string fullPath = Path.Combine(markdownFile.DirectoryName, relativePath);
+                            string fullPath = Path.Combine(file.DirectoryName, relativePath);
+
+                            // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
+                            fullPath = TryGetFullPath(fullPath);
+
+                            if (fullPath != null)
+                            {
+                                TryIncrementFile(fullPath, imageFiles);
+                            }
+                        }
+                    }
+
+                    // Match imageSrc image links
+                    // Example: imageSrc: ./media/vs-mac-2019.svg
+
+                    string imageSrcRegEx = @"imageSrc:([^:]*\.(png|gif|jpg|svg))";
+                    foreach (Match match in Regex.Matches(line, imageSrcRegEx, RegexOptions.IgnoreCase))
+                    {
+                        string relativePath = match.Groups[1].Value.Trim();
+
+                        if (relativePath.StartsWith("/") || relativePath.StartsWith("http"))
+                        {
+                            // The file is in a different repo, so ignore it.
+                            continue;
+
+                            // TODO - For links that start with "/", check if they are in the same repo.
+                        }
+
+                        if (relativePath != null)
+                        {
+                            // Construct the full path to the referenced image file
+                            string fullPath = Path.Combine(file.DirectoryName, relativePath);
 
                             // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
                             fullPath = TryGetFullPath(fullPath);
@@ -1321,6 +1357,20 @@ namespace CleanRepo
             SearchOption searchOption = searchRecursively ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
 
             return dir.EnumerateFiles("*.yml", searchOption).ToList();
+        }
+
+        /// <summary>
+        /// Gets all *.yml files recursively, starting in the ancestor directory that contains docfx.json.
+        /// </summary>
+        private static List<FileInfo> GetAllYamlFiles(string directoryPath, out DirectoryInfo rootDirectory)
+        {
+            // Look further up the path until we find docfx.json
+            rootDirectory = GetDocFxDirectory(new DirectoryInfo(directoryPath));
+
+            if (rootDirectory is null)
+                return null;
+
+            return rootDirectory.EnumerateFiles("*.yml", SearchOption.AllDirectories).ToList();
         }
 
         /// <summary>
