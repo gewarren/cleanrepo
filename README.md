@@ -3,7 +3,7 @@
 This command-line tool helps you clean up a DocFx-based content repo. It can:
 
 - find and delete markdown files that aren't linked from a TOC file
-- find and delete orphaned image (.png, .jpg, .gif) files
+- find and delete orphaned image (.png, .jpg, .gif, .svg) files
 - find and delete orphaned "shared" markdown files
 - "clean" an .openpublishing.redirection.json file
 - find and replace links to redirected files
@@ -20,7 +20,7 @@ This command-line tool helps you clean up a DocFx-based content repo. It can:
   --multiples            Use this option to find topics that appear more than
                          once in one or separate TOC.md files.
 
-  --orphaned-images      Find orphaned .png, .gif, or .jpg files.
+  --orphaned-images      Find orphaned .png, .gif, .svg, or .jpg files.
 
   --orphaned-includes    Find orphaned INCLUDE files.
 
@@ -67,7 +67,7 @@ Find orphaned topics non-recursively (that is, only in the specified directory):
 CleanRepo.exe --orphaned-topics -s false -d c:\repos\visualstudio-docs-pr\docs\ide
 ```
 
-Find and delete orphaned .png/.gif/.jpg files (recursive):
+Find and delete orphaned .png/.gif/.jpg/.svg files (recursive):
 
 ```
 CleanRepo.exe --orphaned-images -g -d c:\repos\visualstudio-docs-pr\docs\ide
