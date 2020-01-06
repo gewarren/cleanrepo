@@ -113,6 +113,7 @@ namespace CleanRepo
 
                     ListOrphanedIncludes(options.InputDirectory, includeFiles, options.Delete);
                 }
+                // Clean master redirection file.
                 else if (options.CleanRedirectionFile)
                 {
                     if (String.IsNullOrEmpty(options.DocsetName))
@@ -142,14 +143,14 @@ namespace CleanRepo
                         Console.WriteLine($"\nCould not find redirects file for directory '{options.DocsetRoot}'.");
                         return;
                     }
-                    
+
                     DirectoryInfo dirInfo = new DirectoryInfo(options.DocsetRoot);
                     string docsetRootFolder = dirInfo.Name;
 
                     Console.WriteLine($"\nCleaning the '{redirectsFile.FullName}' redirection file.\n");
                     CleanRedirectsFile(redirectsFile, options.DocsetName, docsetRootFolder);
                 }
-                // Find links to topics in the central redirect file
+                // Replace links to topics that are redirected in the master redirection file
                 else if (options.ReplaceRedirectTargets)
                 {
                     if (String.IsNullOrEmpty(options.InputDirectory) || !Directory.Exists(options.InputDirectory))
@@ -198,11 +199,11 @@ namespace CleanRepo
 
                     // Check all links, including in toc.yml, to files in the redirects list.
                     // Replace links to redirected files.
-                    FindRedirectLinks(redirects, linkingFiles);
+                    ReplaceRedirectedLinks(redirects, linkingFiles);
 
                     Console.WriteLine("DONE");
                 }
-                // Replace site-relative links to *this* repo with file-relative links
+                // Replace site-relative links to *this* repo with file-relative links.
                 else if (options.ReplaceWithRelativeLinks)
                 {
                     if (String.IsNullOrEmpty(options.InputDirectory) || !Directory.Exists(options.InputDirectory))
@@ -231,6 +232,7 @@ namespace CleanRepo
                     // Check all links in these files.
                     ReplaceLinks(linkingFiles, options.DocsetName, options.DocsetRoot);
                 }
+                // Nothing to do.
                 else
                 {
                     Console.WriteLine("\nYou did not specify which function to perform.");
@@ -310,7 +312,7 @@ namespace CleanRepo
                             // If a previous link was found and replace, the text may have changed.
                             string currentFileText = File.ReadAllText(linkingFile.FullName);
 
-                            string newText = currentFileText.Replace($"](/{docsetName}/{siteRelativePath})", $"]({fileRelativePath})");
+                            string newText = currentFileText.Replace(match.Groups[0].Value, $"]({fileRelativePath})");
                             File.WriteAllText(linkingFile.FullName, newText);
                         }
                     }
@@ -1200,7 +1202,7 @@ namespace CleanRepo
             return redirects;
         }
 
-        private static void FindRedirectLinks(List<Redirect> redirects, List<FileInfo> linkingFiles)
+        private static void ReplaceRedirectedLinks(List<Redirect> redirects, List<FileInfo> linkingFiles)
         {
             Dictionary<string, Redirect> redirectLookup = Enumerable.ToDictionary<Redirect, string>(redirects, r => r.source_path);
 
@@ -1213,24 +1215,25 @@ namespace CleanRepo
 
                 string text = File.ReadAllText(linkingFile.FullName);
 
+                // Matches link with optional #bookmark on the end.
                 string linkRegEx = linkingFile.Extension.ToLower() == ".yml" ?
-                    @"href:(.*\.md)" :
-                    @"\]\((?!http)([^\)]*\.md)\)";
+                    @"href:(.*\.md)(#[\w-]+)?" :
+                    @"\]\((?!http)([^\)]*\.md)(#[\w-]+)?\)";
 
-            // For each link in the file...
-            foreach (Match match in Regex.Matches(text, linkRegEx, RegexOptions.IgnoreCase))
+                // For each link in the file...
+                foreach (Match match in Regex.Matches(text, linkRegEx, RegexOptions.IgnoreCase))
                 {
-                // Get the file-relative path to the linked file.
-                string relativePath = match.Groups[1].Value.Trim();
+                    // Get the file-relative path to the linked file.
+                    string relativePath = match.Groups[1].Value.Trim();
 
-                // Remove any quotation marks
-                relativePath = relativePath.Replace("\"", "");
+                    // Remove any quotation marks
+                    relativePath = relativePath.Replace("\"", "");
 
                     string fullPath = null;
                     try
                     {
-                    // Construct the full path to the linked file.
-                    fullPath = Path.Combine(linkingFile.DirectoryName, relativePath);
+                        // Construct the full path to the linked file.
+                        fullPath = Path.Combine(linkingFile.DirectoryName, relativePath);
                     }
                     catch (ArgumentException)
                     {
@@ -1238,8 +1241,8 @@ namespace CleanRepo
                         continue;
                     }
 
-                // Clean up the path by replacing forward slashes with back slashes, removing extra dots, etc.
-                try
+                    // Clean up the path by replacing forward slashes with back slashes, removing extra dots, etc.
+                    try
                     {
                         fullPath = Path.GetFullPath(fullPath);
                     }
@@ -1251,18 +1254,30 @@ namespace CleanRepo
 
                     if (fullPath != null)
                     {
-                    // See if our constructed path matches a source file in the dictionary of redirects.
-                    if (redirectLookup.ContainsKey(fullPath))
+                        // See if our constructed path matches a source file in the dictionary of redirects.
+                        if (redirectLookup.ContainsKey(fullPath))
                         {
                             foundOldLink = true;
                             output.AppendLine($"'{relativePath}'");
 
-                        // Replace the link.
-                        string redirectURL = redirectLookup[fullPath].redirect_url;
+                            string redirectURL = redirectLookup[fullPath].redirect_url;
+
+                            // Add the bookmark back on, in case it applies to the new target.
+                            if (!String.IsNullOrEmpty(match.Groups[2].Value))
+                                redirectURL = redirectURL + match.Groups[2].Value;
 
                             output.AppendLine($"REPLACING '({relativePath})' with '({redirectURL})'.");
 
-                            string newText = text.Replace($"]({relativePath})", $"]({redirectURL})");
+                            // Replace the link.
+                            string newText = null;
+                            if (linkingFile.Extension.ToLower() == ".md")
+                            {
+                                newText = text.Replace(match.Groups[0].Value, $"]({redirectURL})");
+                            }
+                            else // .yml file
+                            {
+                                newText = text.Replace(match.Groups[0].Value, $"href: {redirectURL}");
+                            }
                             File.WriteAllText(linkingFile.FullName, newText);
                         }
                     }
@@ -1273,6 +1288,7 @@ namespace CleanRepo
                     Console.WriteLine(output.ToString());
                 }
             });
+            //}
         }
         #endregion
 
