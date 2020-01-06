@@ -263,8 +263,20 @@ namespace CleanRepo
                     string siteRelativePath = match.Groups[1].Value;
 
                     // If the path contains a ?, ignore this link as replacing it might not be ideal.
+                    // For example, if the link is to a specific version like "?view=vs-2015".
                     if (siteRelativePath.IndexOf('?') >= 0)
                         continue;
+
+                    // If the link contains a bookmark, trim it off and add it back later.
+                    // If there are two hash characters, this pattern is greedy and finds the last one.
+                    string bookmarkPattern = @"(.*)(#.*)";
+                    string bookmark = null;
+                    if (Regex.IsMatch(siteRelativePath, bookmarkPattern))
+                    {
+                        Match bookmarkMatch = Regex.Match(siteRelativePath, bookmarkPattern);
+                        siteRelativePath = bookmarkMatch.Groups[1].Value;
+                        bookmark = bookmarkMatch.Groups[2].Value;
+                    }
 
                     // Build an absolute path to this file.
                     string absolutePath = Path.Combine(rootDirectory, siteRelativePath.Trim() + ".md");
@@ -285,6 +297,13 @@ namespace CleanRepo
 
                         if (fileRelativePath != null)
                         {
+                            // Add the bookmark back onto the end, if there is one.
+                            if (!String.IsNullOrEmpty(bookmark))
+                            {
+                                fileRelativePath = fileRelativePath + bookmark;
+                                siteRelativePath = siteRelativePath + bookmark;
+                            }
+
                             // Replace the link.
                             Console.WriteLine($"Replacing '/{docsetName}/{siteRelativePath}' link with '{fileRelativePath}' in file '{linkingFile.FullName}'.");
 
