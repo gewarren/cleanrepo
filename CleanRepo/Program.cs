@@ -77,6 +77,12 @@ namespace CleanRepo
                         return;
                     }
 
+                    if (String.IsNullOrEmpty(options.DocsetName))
+                    {
+                        Console.WriteLine("\nYou must specify a docset name, e.g. dotnet.");
+                        return;
+                    }
+
                     string recursive = options.SearchRecursively ? "recursively " : "";
                     Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory {recursive}for orphaned .png/.jpg/.gif/.svg files...\n");
 
@@ -88,7 +94,7 @@ namespace CleanRepo
                         return;
                     }
 
-                    ListOrphanedImages(options.InputDirectory, imageFiles, options.Delete);
+                    ListOrphanedImages(options.InputDirectory, imageFiles, options.DocsetName, options.Delete);
                 }
                 // Find orphaned include-type files
                 else if (options.FindOrphanedIncludes)
@@ -235,7 +241,7 @@ namespace CleanRepo
                 // Nothing to do.
                 else
                 {
-                    Console.WriteLine("\nYou did not specify which function to perform.");
+                    Console.WriteLine("\nYou did not specify which function to perform. To see options, use 'CleanRepo.exe -?'.");
                     return;
                 }
 
@@ -532,7 +538,7 @@ namespace CleanRepo
         ///    For each markdown file
         ///       Do a RegEx search for the image
         ///          If found, BREAK to the next image
-        private static void ListOrphanedImages(string inputDirectory, Dictionary<string, int> imageFiles, bool deleteOrphanedImages)
+        private static void ListOrphanedImages(string inputDirectory, Dictionary<string, int> imageFiles, string docsetName, bool deleteOrphanedImages)
         {
             // Get Markdown files
             var files = GetAllMarkdownFiles(inputDirectory, out DirectoryInfo rootDirectory);
@@ -579,30 +585,42 @@ namespace CleanRepo
                     // There could be more than one image reference on the line, hence the foreach loop.
                     foreach (Match match in Regex.Matches(line, mdImageRegEx, RegexOptions.IgnoreCase))
                     {
-                        string relativePath = match.Groups[1].Value.Trim();
+                        string path = match.Groups[1].Value.Trim();
 
-                        if (relativePath.StartsWith("/") || relativePath.StartsWith("http"))
+                        if (path.StartsWith("http"))
                         {
-                            // The file is in a different repo, so ignore it.
+                            // The file is not in this repo, so ignore it.
                             continue;
-
-                            // TODO - For links that start with "/", check if they are in the same repo.
                         }
 
-                        if (relativePath != null)
+                        if (path.StartsWith("/"))
+                        {
+                            if (!path.StartsWith("/" + docsetName + "/"))
+                            {
+                                // The file is in a different repo, so ignore it.
+                                continue;
+                            }
+
+                            // Trim off the docset name, but leave the forward slash that follows it.
+                            path = path.Substring(docsetName.Length + 1);
+                        }
+
+                        if (path != null)
                         {
                             // Construct the full path to the referenced image file
-                            string fullPath = null;
+                            string absolutePath = null;
                             try
                             {
                                 // Path could start with a tilde e.g. ~/media/pic1.png
-                                if (relativePath.StartsWith("~/"))
+                                // This case also includes site-relative links to files in the same repo where
+                                // we've already trimmed off the docset name.
+                                if (path.StartsWith("~/") || path.StartsWith("/"))
                                 {
-                                    fullPath = Path.Combine(rootDirectory.FullName, relativePath.TrimStart('~', '/'));
+                                    absolutePath = Path.Combine(rootDirectory.FullName, path.TrimStart('~', '/'));
                                 }
                                 else
                                 {
-                                    fullPath = Path.Combine(file.DirectoryName, relativePath);
+                                    absolutePath = Path.Combine(file.DirectoryName, path);
                                 }
                             }
                             catch (ArgumentException)
@@ -614,7 +632,7 @@ namespace CleanRepo
                             // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
                             try
                             {
-                                fullPath = Path.GetFullPath(fullPath);
+                                absolutePath = Path.GetFullPath(absolutePath);
                             }
                             catch (ArgumentException)
                             {
@@ -622,9 +640,9 @@ namespace CleanRepo
                                 continue;
                             }
 
-                            if (fullPath != null)
+                            if (absolutePath != null)
                             {
-                                TryIncrementFile(fullPath, imageFiles);
+                                TryIncrementFile(absolutePath, imageFiles);
                             }
                         }
                     }
@@ -636,38 +654,50 @@ namespace CleanRepo
                     string htmlImageRegEx = "<img[^>]*?src[ ]*=[ ]*\"([^>]*?.(png|gif|jpg|svg))[ ]*\"";
                     foreach (Match match in Regex.Matches(line, htmlImageRegEx, RegexOptions.IgnoreCase))
                     {
-                        string relativePath = match.Groups[1].Value.Trim();
+                        string path = match.Groups[1].Value.Trim();
 
-                        if (relativePath.StartsWith("/") || relativePath.StartsWith("http"))
+                        if (path.StartsWith("http"))
                         {
-                            // The file is in a different repo, so ignore it.
+                            // The file is not in this repo, so ignore it.
                             continue;
-
-                            // TODO - check if link is site-relative to the same docset
                         }
 
-                        if (relativePath != null)
+                        if (path.StartsWith("/"))
                         {
-                            string fullPath;
+                            if (!path.StartsWith("/" + docsetName + "/"))
+                            {
+                                // The file is in a different repo, so ignore it.
+                                continue;
+                            }
+
+                            // Trim off the docset name, but leave the forward slash that follows it.
+                            path = path.Substring(docsetName.Length + 1);
+                        }
+
+                        if (path != null)
+                        {
+                            string absolutePath;
 
                             // Path could start with a tilde e.g. ~/media/pic1.png
-                            if (relativePath.StartsWith("~/"))
+                            // This case also includes site-relative links to files in the same repo where
+                            // we've already trimmed off the docset name.
+                            if (path.StartsWith("~/") || path.StartsWith("/"))
                             {
                                 // Construct the full path to the referenced image file
-                                fullPath = Path.Combine(rootDirectory.FullName, relativePath.TrimStart('~', '/'));
+                                absolutePath = Path.Combine(rootDirectory.FullName, path.TrimStart('~', '/'));
                             }
                             else
                             {
                                 // Construct the full path to the referenced image file
-                                fullPath = Path.Combine(file.DirectoryName, relativePath);
+                                absolutePath = Path.Combine(file.DirectoryName, path);
                             }
 
                             // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
-                            fullPath = TryGetFullPath(fullPath);
+                            absolutePath = TryGetFullPath(absolutePath);
 
-                            if (fullPath != null)
+                            if (absolutePath != null)
                             {
-                                TryIncrementFile(fullPath, imageFiles);
+                                TryIncrementFile(absolutePath, imageFiles);
                             }
                         }
                     }
@@ -678,27 +708,50 @@ namespace CleanRepo
                     string referenceLinkRegEx = @"\[.*\]:(.*\.(png|gif|jpg|svg))";
                     foreach (Match match in Regex.Matches(line, referenceLinkRegEx, RegexOptions.IgnoreCase))
                     {
-                        string relativePath = match.Groups[1].Value.Trim();
+                        string path = match.Groups[1].Value.Trim();
 
-                        if (relativePath.StartsWith("/") || relativePath.StartsWith("http"))
+                        if (path.StartsWith("http"))
                         {
-                            // The file is in a different repo, so ignore it.
+                            // The file is not in this repo, so ignore it.
                             continue;
-
-                            // TODO - For links that start with "/", check if they are in the same repo.
                         }
 
-                        if (relativePath != null)
+                        if (path.StartsWith("/"))
                         {
-                            // Construct the full path to the referenced image file
-                            string fullPath = Path.Combine(file.DirectoryName, relativePath);
+                            if (!path.StartsWith("/" + docsetName + "/"))
+                            {
+                                // The file is in a different repo, so ignore it.
+                                continue;
+                            }
+
+                            // Trim off the docset name, but leave the forward slash that follows it.
+                            path = path.Substring(docsetName.Length + 1);
+                        }
+
+                        if (path != null)
+                        {
+                            string absolutePath;
+
+                            // Path could start with a tilde e.g. ~/media/pic1.png
+                            // This case also includes site-relative links to files in the same repo where
+                            // we've already trimmed off the docset name.
+                            if (path.StartsWith("~/") || path.StartsWith("/"))
+                            {
+                                // Construct the full path to the referenced image file
+                                absolutePath = Path.Combine(rootDirectory.FullName, path.TrimStart('~', '/'));
+                            }
+                            else
+                            {
+                                // Construct the full path to the referenced image file
+                                absolutePath = Path.Combine(file.DirectoryName, path);
+                            }
 
                             // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
-                            fullPath = TryGetFullPath(fullPath);
+                            absolutePath = TryGetFullPath(absolutePath);
 
-                            if (fullPath != null)
+                            if (absolutePath != null)
                             {
-                                TryIncrementFile(fullPath, imageFiles);
+                                TryIncrementFile(absolutePath, imageFiles);
                             }
                         }
                     }
@@ -709,27 +762,50 @@ namespace CleanRepo
                     string imageSrcRegEx = @"imageSrc:([^:]*\.(png|gif|jpg|svg))";
                     foreach (Match match in Regex.Matches(line, imageSrcRegEx, RegexOptions.IgnoreCase))
                     {
-                        string relativePath = match.Groups[1].Value.Trim();
+                        string path = match.Groups[1].Value.Trim();
 
-                        if (relativePath.StartsWith("/") || relativePath.StartsWith("http"))
+                        if (path.StartsWith("http"))
                         {
-                            // The file is in a different repo, so ignore it.
+                            // The file is not in this repo, so ignore it.
                             continue;
-
-                            // TODO - For links that start with "/", check if they are in the same repo.
                         }
 
-                        if (relativePath != null)
+                        if (path.StartsWith("/"))
                         {
-                            // Construct the full path to the referenced image file
-                            string fullPath = Path.Combine(file.DirectoryName, relativePath);
+                            if (!path.StartsWith("/" + docsetName + "/"))
+                            {
+                                // The file is in a different repo, so ignore it.
+                                continue;
+                            }
+
+                            // Trim off the docset name, but leave the forward slash that follows it.
+                            path = path.Substring(docsetName.Length + 1);
+                        }
+
+                        if (path != null)
+                        {
+                            string absolutePath;
+
+                            // Path could start with a tilde e.g. ~/media/pic1.png
+                            // This case also includes site-relative links to files in the same repo where
+                            // we've already trimmed off the docset name.
+                            if (path.StartsWith("~/") || path.StartsWith("/"))
+                            {
+                                // Construct the full path to the referenced image file
+                                absolutePath = Path.Combine(rootDirectory.FullName, path.TrimStart('~', '/'));
+                            }
+                            else
+                            {
+                                // Construct the full path to the referenced image file
+                                absolutePath = Path.Combine(file.DirectoryName, path);
+                            }
 
                             // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
-                            fullPath = TryGetFullPath(fullPath);
+                            absolutePath = TryGetFullPath(absolutePath);
 
-                            if (fullPath != null)
+                            if (absolutePath != null)
                             {
-                                TryIncrementFile(fullPath, imageFiles);
+                                TryIncrementFile(absolutePath, imageFiles);
                             }
                         }
                     }
@@ -740,27 +816,50 @@ namespace CleanRepo
                     string tripleColonRegEx = @":::image[^:]*source=""([^:]*\.(png|gif|jpg|svg))""[^:]*:::";
                     foreach (Match match in Regex.Matches(line, tripleColonRegEx, RegexOptions.IgnoreCase))
                     {
-                        string relativePath = match.Groups[1].Value.Trim();
+                        string path = match.Groups[1].Value.Trim();
 
-                        if (relativePath.StartsWith("/") || relativePath.StartsWith("http"))
+                        if (path.StartsWith("http"))
                         {
-                            // The file is in a different repo, so ignore it.
+                            // The file is not in this repo, so ignore it.
                             continue;
-
-                            // TODO - For links that start with "/", check if they are in the same repo.
                         }
 
-                        if (relativePath != null)
+                        if (path.StartsWith("/"))
                         {
-                            // Construct the full path to the referenced image file
-                            string fullPath = Path.Combine(file.DirectoryName, relativePath);
+                            if (!path.StartsWith("/" + docsetName + "/"))
+                            {
+                                // The file is in a different repo, so ignore it.
+                                continue;
+                            }
+
+                            // Trim off the docset name, but leave the forward slash that follows it.
+                            path = path.Substring(docsetName.Length + 1);
+                        }
+
+                        if (path != null)
+                        {
+                            string absolutePath;
+
+                            // Path could start with a tilde e.g. ~/media/pic1.png
+                            // This case also includes site-relative links to files in the same repo where
+                            // we've already trimmed off the docset name.
+                            if (path.StartsWith("~/") || path.StartsWith("/"))
+                            {
+                                // Construct the full path to the referenced image file
+                                absolutePath = Path.Combine(rootDirectory.FullName, path.TrimStart('~', '/'));
+                            }
+                            else
+                            {
+                                // Construct the full path to the referenced image file
+                                absolutePath = Path.Combine(file.DirectoryName, path);
+                            }
 
                             // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
-                            fullPath = TryGetFullPath(fullPath);
+                            absolutePath = TryGetFullPath(absolutePath);
 
-                            if (fullPath != null)
+                            if (absolutePath != null)
                             {
-                                TryIncrementFile(fullPath, imageFiles);
+                                TryIncrementFile(absolutePath, imageFiles);
                             }
                         }
                     }
