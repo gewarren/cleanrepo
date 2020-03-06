@@ -259,69 +259,129 @@ namespace CleanRepo
         {
             foreach (var linkingFile in linkingFiles)
             {
-                // Find links that look like [link text](/docsetName/some other text)
-                string pattern = @"\]\(/" + docsetName + @"/([^\)]*)\)";
-
                 // Read the whole file up front because we might change the file mid-flight.
                 string originalFileText = File.ReadAllText(linkingFile.FullName);
 
-                foreach (Match match in Regex.Matches(originalFileText, pattern, RegexOptions.IgnoreCase))
+                // Find links that look like [link text](/docsetName/some other text)
+                string pattern1 = @"\]\((/" + docsetName + @"/([^\)]*))\)";
+
+                foreach (Match match in Regex.Matches(originalFileText, pattern1, RegexOptions.IgnoreCase))
                 {
                     // Get the first capture group, which is the part of the path after the docset name.
-                    string siteRelativePath = match.Groups[1].Value;
+                    string siteRelativePath = match.Groups[2].Value;
 
                     // If the path contains a ?, ignore this link as replacing it might not be ideal.
                     // For example, if the link is to a specific version like "?view=vs-2015".
                     if (siteRelativePath.IndexOf('?') >= 0)
                         continue;
 
-                    // If the link contains a bookmark, trim it off and add it back later.
-                    // If there are two hash characters, this pattern is greedy and finds the last one.
-                    string bookmarkPattern = @"(.*)(#.*)";
-                    string bookmark = null;
-                    if (Regex.IsMatch(siteRelativePath, bookmarkPattern))
+                    ReplaceLinkText(siteRelativePath, rootDirectory, linkingFile.FullName, match.Groups[0].Value, match.Groups[1].Value, docsetName);
+                }
+
+                // Find links that look like <img src="/azure/mydocs/media/pic3.png">
+                string pattern2 = "<img[^>]*?src[ ]*=[ ]*\"(/" + docsetName + "/([^>]*?.(png|gif|jpg|svg)))[ ]*\"";
+
+                foreach (Match match in Regex.Matches(originalFileText, pattern2, RegexOptions.IgnoreCase))
+                {
+                    // Get the first capture group, which is the part of the path after the docset name.
+                    string siteRelativePath = match.Groups[2].Value;
+
+                    ReplaceLinkText(siteRelativePath, rootDirectory, linkingFile.FullName, match.Groups[0].Value, match.Groups[1].Value, docsetName);
+                }
+
+                // Find links that look like [0]: /azure/mydocs/media/pic1.png
+                string pattern3 = @"\[.*\]:[ ]*(/" + docsetName + @"/(.*\.(png|gif|jpg|svg)))";
+
+                foreach (Match match in Regex.Matches(originalFileText, pattern3, RegexOptions.IgnoreCase))
+                {
+                    // Get the first capture group, which is the part of the path after the docset name.
+                    string siteRelativePath = match.Groups[2].Value;
+
+                    ReplaceLinkText(siteRelativePath, rootDirectory, linkingFile.FullName, match.Groups[0].Value, match.Groups[1].Value, docsetName);
+                }
+
+                // Find links that look like imageSrc: /azure/mydocs/media/pic1.png
+                string pattern4 = @"imageSrc:[ ]*(/" + docsetName + @"/([^:]*\.(png|gif|jpg|svg)))";
+
+                foreach (Match match in Regex.Matches(originalFileText, pattern4, RegexOptions.IgnoreCase))
+                {
+                    // Get the first capture group, which is the part of the path after the docset name.
+                    string siteRelativePath = match.Groups[2].Value;
+
+                    ReplaceLinkText(siteRelativePath, rootDirectory, linkingFile.FullName, match.Groups[0].Value, match.Groups[1].Value, docsetName);
+                }
+
+                // Find links that look like :::image type="complex" source="/azure/mydocs/media/pic1.png" alt-text="Screenshot.":::
+                string pattern5 = @":::image[^:]*source=""(/" + docsetName + @"/([^:]*\.(png|gif|jpg|svg)))""[^:]*:::";
+
+                foreach (Match match in Regex.Matches(originalFileText, pattern5, RegexOptions.IgnoreCase))
+                {
+                    // Get the first capture group, which is the part of the path after the docset name.
+                    string siteRelativePath = match.Groups[2].Value;
+
+                    ReplaceLinkText(siteRelativePath, rootDirectory, linkingFile.FullName, match.Groups[0].Value, match.Groups[1].Value, docsetName);
+                }
+            }
+        }
+
+        private static void ReplaceLinkText(string siteRelativePath, string rootDirectory, string linkingFileName, string originalMatch, string originalLink, string docsetName)
+        {
+            // If the link contains a bookmark, trim it off and add it back later.
+            // If there are two hash characters, this pattern is greedy and finds the last one.
+            string bookmarkPattern = @"(.*)(#.*)";
+            string bookmark = null;
+            if (Regex.IsMatch(siteRelativePath, bookmarkPattern))
+            {
+                Match bookmarkMatch = Regex.Match(siteRelativePath, bookmarkPattern);
+                siteRelativePath = bookmarkMatch.Groups[1].Value;
+                bookmark = bookmarkMatch.Groups[2].Value;
+            }
+
+            // Build an absolute path to this file.
+            string absolutePath = Path.Combine(rootDirectory, siteRelativePath.Trim());
+
+            // Clean up the path by replacing forward slashes with back slashes, removing extra dots, etc.
+            absolutePath = Path.GetFullPath(absolutePath);
+
+            FileInfo file = new FileInfo(absolutePath);
+            if (String.IsNullOrEmpty(file.Extension))
+            {
+                // Look for a file of this name in the same directory to obtain its extension.
+                FileInfo[] files = file.Directory.GetFiles(file.Name + "*");
+                if (files.Length > 0)
+                {
+                    absolutePath = files[0].FullName;
+                }
+            }
+
+            // Check that the link is valid in the local repo.
+            if (!File.Exists(absolutePath))
+            {
+                return;
+            }
+
+            if (absolutePath != null)
+            {
+                // Determine the file-relative path to absolutePath.
+                string fileRelativePath = GetFileRelativePath(linkingFileName, absolutePath);
+
+                if (fileRelativePath != null)
+                {
+                    // Add the bookmark back onto the end, if there is one.
+                    if (!String.IsNullOrEmpty(bookmark))
                     {
-                        Match bookmarkMatch = Regex.Match(siteRelativePath, bookmarkPattern);
-                        siteRelativePath = bookmarkMatch.Groups[1].Value;
-                        bookmark = bookmarkMatch.Groups[2].Value;
+                        fileRelativePath = fileRelativePath + bookmark;
                     }
 
-                    // Build an absolute path to this file.
-                    string absolutePath = Path.Combine(rootDirectory, siteRelativePath.Trim() + ".md");
+                    string newText = originalMatch.Replace(originalLink, fileRelativePath);
 
-                    // Clean up the path by replacing forward slashes with back slashes, removing extra dots, etc.
-                    absolutePath = Path.GetFullPath(absolutePath);
+                    // Replace the link.
+                    Console.WriteLine($"Replacing '{originalMatch}' with '{newText}' in file '{linkingFileName}'.");
 
-                    // Check that the link is valid in the local repo.
-                    if (!File.Exists(absolutePath))
-                    {
-                        continue;
-                    }
+                    // If a previous link was found and replaced, the text may have changed, so reread the file.
+                    string currentFileText = File.ReadAllText(linkingFileName);
 
-                    if (absolutePath != null)
-                    {
-                        // Determine the file-relative path to absolutePath.
-                        string fileRelativePath = GetFileRelativePath(linkingFile.FullName, absolutePath);
-
-                        if (fileRelativePath != null)
-                        {
-                            // Add the bookmark back onto the end, if there is one.
-                            if (!String.IsNullOrEmpty(bookmark))
-                            {
-                                fileRelativePath = fileRelativePath + bookmark;
-                                siteRelativePath = siteRelativePath + bookmark;
-                            }
-
-                            // Replace the link.
-                            Console.WriteLine($"Replacing '/{docsetName}/{siteRelativePath}' link with '{fileRelativePath}' in file '{linkingFile.FullName}'.");
-
-                            // If a previous link was found and replace, the text may have changed.
-                            string currentFileText = File.ReadAllText(linkingFile.FullName);
-
-                            string newText = currentFileText.Replace(match.Groups[0].Value, $"]({fileRelativePath})");
-                            File.WriteAllText(linkingFile.FullName, newText);
-                        }
-                    }
+                    File.WriteAllText(linkingFileName, currentFileText.Replace(originalMatch, newText));
                 }
             }
         }
@@ -573,6 +633,8 @@ namespace CleanRepo
                     ![Architecture](./media/ci-cd-flask/Architecture.PNG?raw=true)
                     The Light Bulb icon ![Small Light Bulb Icon](media/vs2015_lightbulbsmall.png "VS2017_LightBulbSmall")
                     imageSrc: ./media/vs-mac-2019.svg
+                    <img src="/azure/mydocs/media/pic3.png" alt="Work Backlogs page shortcuts"/>
+                    [0]: ../../media/vs-acr-provisioning-dialog-2019.png
                     :::image type="complex" source="./media/seedwork-classes.png" alt-text="Screenshot of the SeedWork folder.":::
                     *
                     * Does not currently support file names that contain parentheses:
