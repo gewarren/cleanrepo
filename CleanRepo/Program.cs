@@ -347,10 +347,19 @@ namespace CleanRepo
             if (String.IsNullOrEmpty(file.Extension))
             {
                 // Look for a file of this name in the same directory to obtain its extension.
-                FileInfo[] files = file.Directory.GetFiles(file.Name + "*");
-                if (files.Length > 0)
+                try
                 {
-                    absolutePath = files[0].FullName;
+                    FileInfo[] files = file.Directory.GetFiles(file.Name + "*");
+                    if (files.Length > 0)
+                    {
+                        absolutePath = files[0].FullName;
+                    }
+                }
+                catch (DirectoryNotFoundException)
+                {
+                    // This can happen if files from a different repo map to the same docset.
+                    // For example, the C# language specification: [C# Language Specification](/dotnet/csharp/language-reference/language-specification/introduction)
+                    return;
                 }
             }
 
