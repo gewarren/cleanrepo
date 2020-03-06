@@ -7,7 +7,7 @@ This command-line tool helps you clean up a DocFx-based content repo. It can:
 - find and delete orphaned "shared" markdown files
 - "clean" an .openpublishing.redirection.json file
 - find and replace links to redirected files
-- replace site-relative links with file-relative links
+- replace site-relative links with file-relative links (includes image links)
 - find topics that appear more than once in a TOC file
 
 ## Usage
@@ -70,7 +70,7 @@ CleanRepo.exe --orphaned-topics -s false -d c:\repos\visualstudio-docs-pr\docs\i
 Find and delete orphaned .png/.gif/.jpg/.svg files (recursive):
 
 ```
-CleanRepo.exe --orphaned-images -g -d c:\repos\visualstudio-docs-pr\docs\ide
+CleanRepo.exe --orphaned-images -g -d c:\repos\visualstudio-docs-pr\docs\ide --docset-name visualstudio
 ```
 
 Find and delete shared markdown files that are orphaned (recursive):
@@ -94,7 +94,7 @@ CleanRepo.exe --replace-redirects -d c:\repos\visualstudio-docs-pr\docs\ide
   > [!TIP]
   > Some redirect targets are themselves redirected to yet another target. For this reason, it's recommended to run the --clean-redirects option before the --replace-redirects option.
 
-Replace site-relative links to the specified docset with file-relative links, when the file exists:
+Replace site-relative links to the specified docset with file-relative links, when the file exists (includes image links):
 
 ```
 CleanRepo.exe --relative-links --docset-name visualstudio --docset-root c:\repos\visualstudio-docs-pr\docs -d c:\repos\visualstudio-docs-pr\docs\ide
