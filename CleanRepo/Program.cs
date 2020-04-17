@@ -349,7 +349,7 @@ namespace CleanRepo
                 // Look for a file of this name in the same directory to obtain its extension.
                 try
                 {
-                    FileInfo[] files = file.Directory.GetFiles(file.Name + "*");
+                    FileInfo[] files = file.Directory.GetFiles(file.Name + ".*");
                     if (files.Length > 0)
                     {
                         absolutePath = files[0].FullName;
