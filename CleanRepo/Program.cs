@@ -863,11 +863,12 @@ namespace CleanRepo
         {
             Dictionary<string, int> filesToKeep = new Dictionary<string, int>();
 
-            Console.WriteLine("\nTopics not in any TOC file (that are also not includes or shared):\n");
+            Console.WriteLine("\nTopics not in any TOC file (that are also not includes or shared or misc):\n");
 
             bool IsTopicFile(FileInfo file) =>
                 !file.FullName.Contains("\\includes\\") &&
                 !file.FullName.Contains("\\_shared\\") &&
+                !file.FullName.Contains("\\misc\\") &&
                 String.Compare(file.Name, "TOC.md", true) != 0 &&
                 String.Compare(file.Name, "index.md", true) != 0;
 
