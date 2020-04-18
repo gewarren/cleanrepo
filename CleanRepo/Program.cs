@@ -262,8 +262,13 @@ namespace CleanRepo
                 // Read the whole file up front because we might change the file mid-flight.
                 string originalFileText = File.ReadAllText(linkingFile.FullName);
 
+                // Test strings:
+                // ![VisualizerIcon](/test-repo/debugger/dbg-tips.png "Visualizer icon")
+                // ![VisualizerIcon](/test-repo/debugger/dbg-tips.png)
+                // For more information, see [this page](/test-repo/debugger/dbg-tips).
+
                 // Find links that look like [link text](/docsetName/some other text)
-                string pattern1 = @"\]\((/" + docsetName + @"/([^\)]*))\)";
+                string pattern1 = @"\]\((/" + docsetName + @"/([^\)\s]*))";
 
                 foreach (Match match in Regex.Matches(originalFileText, pattern1, RegexOptions.IgnoreCase))
                 {
@@ -352,7 +357,14 @@ namespace CleanRepo
                     FileInfo[] files = file.Directory.GetFiles(file.Name + ".*");
                     if (files.Length > 0)
                     {
-                        absolutePath = files[0].FullName;
+                        // Since site-relative image links still require a file extension,
+                        // and this link didn't include an extension, favor a non-image extension first.
+                        if (files.Any(file => file.Extension == ".md"))
+                            absolutePath = files.First(file => file.Extension == ".md").FullName;
+                        else if (files.Any(file => file.Extension == ".yml"))
+                            absolutePath = files.First(file => file.Extension == ".yml").FullName;
+                        else
+                            absolutePath = files[0].FullName;
                     }
                 }
                 catch (DirectoryNotFoundException)
