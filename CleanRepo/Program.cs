@@ -359,10 +359,10 @@ namespace CleanRepo
                     {
                         // Since site-relative image links still require a file extension,
                         // and this link didn't include an extension, favor a non-image extension first.
-                        if (files.Any(file => file.Extension == ".md"))
-                            absolutePath = files.First(file => file.Extension == ".md").FullName;
-                        else if (files.Any(file => file.Extension == ".yml"))
-                            absolutePath = files.First(file => file.Extension == ".yml").FullName;
+                        if (files.Any(f => f.Extension == ".md"))
+                            absolutePath = files.First(f => f.Extension == ".md").FullName;
+                        else if (files.Any(f => f.Extension == ".yml"))
+                            absolutePath = files.First(f => f.Extension == ".yml").FullName;
                         else
                             absolutePath = files[0].FullName;
                     }
