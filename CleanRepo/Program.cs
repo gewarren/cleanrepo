@@ -672,11 +672,20 @@ namespace CleanRepo
 
                         if (path.StartsWith("http"))
                         {
-                            // The file is not in this repo, so ignore it.
-                            continue;
-                        }
+                            // This could be an absolute URL to a file in the repo, so check.
+                            string httpRegex = @"https?:\/\/docs.microsoft.com\/([A-z][A-z]-[A-z][A-z]\/)?" + docsetName + @"\/";
+                            var httpMatch = Regex.Match(path, httpRegex, RegexOptions.IgnoreCase);
 
-                        if (path.StartsWith("/"))
+                            if (!httpMatch.Success)
+                            {
+                                // The file is in a different repo, so ignore it.
+                                continue;
+                            }
+
+                            // Chop off the https://docs.microsoft.com/docset/ part of the path.
+                            path = path.Substring(httpMatch.Value.Length);
+                        }
+                        else if (path.StartsWith("/"))
                         {
                             if (!path.StartsWith("/" + docsetName + "/"))
                             {
