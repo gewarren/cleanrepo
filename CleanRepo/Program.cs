@@ -906,7 +906,7 @@ namespace CleanRepo
                     // Example: :::image type="complex" source="./media/seedwork-classes.png" alt-text="Screenshot of SeedWork folder.":::
 
                     //string tripleColonRegEx = @":::image[^:]*source=""([^:]*\.(png|gif|jpg|svg))""[^:]*:::";
-                    string tripleColonRegEx = @":::image[^:]*source=""([^:]*?\.(png | gif | jpg | svg))""";
+                    string tripleColonRegEx = @":::image[^:]*source=""([^:]*?\.(png|gif|jpg|svg))""";
                     foreach (Match match in Regex.Matches(line, tripleColonRegEx, RegexOptions.IgnoreCase))
                     {
                         string path = match.Groups[1].Value.Trim();
@@ -1119,7 +1119,7 @@ namespace CleanRepo
 
             string linkRegEx = tocFile.Extension.ToLower() == ".yml" ?
                 @"href:(.*?" + linkedFile.Name + ")" :
-                @"\]\((?!http)(([^\)])*?" + linkedFile.Name + @")";
+                @"\]\((([^\)])*?" + linkedFile.Name + @")";
 
             // For each link that contains the file name...
             foreach (Match match in Regex.Matches(text, linkRegEx, RegexOptions.IgnoreCase))
@@ -1130,7 +1130,7 @@ namespace CleanRepo
                 // Remove any quotation marks
                 relativePath = relativePath.Replace("\"", "");
 
-                if (relativePath.StartsWith("/") || relativePath.StartsWith("http"))
+                if (relativePath.StartsWith("/") || relativePath.StartsWith("http:") || relativePath.StartsWith("https:"))
                 {
                     // The file is in a different repo, so ignore it.
                     continue;
@@ -1185,7 +1185,7 @@ namespace CleanRepo
             {
                 string linkRegEx = linkingFile.Extension.ToLower() == ".yml" ?
                         @"href:(.*?" + linkedFile.Name + ")" :
-                        @"\]\((?!http)(([^\)])*?" + linkedFile.Name + @")";
+                        @"\]\((([^\)])*?" + linkedFile.Name + @")";
 
                 // For each link that contains the file name...
                 foreach (Match match in Regex.Matches(fileContents, linkRegEx, RegexOptions.IgnoreCase))
@@ -1411,7 +1411,7 @@ namespace CleanRepo
                 // Matches link with optional #bookmark on the end.
                 string linkRegEx = linkingFile.Extension.ToLower() == ".yml" ?
                     @"href:(.*\.md)(#[\w-]+)?" :
-                    @"\]\((?!http)([^\)]*\.md)(#[\w-]+)?\)";
+                    @"\]\(([^\)]*\.md)(#[\w-]+)?\)";
 
                 // For each link in the file...
                 foreach (Match match in Regex.Matches(text, linkRegEx, RegexOptions.IgnoreCase))
@@ -1549,7 +1549,7 @@ namespace CleanRepo
 
                 string linkRegEx = linkingFile.Extension.ToLower() == ".yml" ?
                     @"href:(.*?" + linkedFile.Name + ")" :
-                    @"\]\((?!http)(([^\)])*?" + linkedFile.Name + @")";
+                    @"\]\((([^\)])*?" + linkedFile.Name + @")";
 
                 // For each link that contains the file name...
                 foreach (Match match in Regex.Matches(line, linkRegEx, RegexOptions.IgnoreCase))
