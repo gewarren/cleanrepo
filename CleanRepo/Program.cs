@@ -905,7 +905,8 @@ namespace CleanRepo
                     // Match ::: image links
                     // Example: :::image type="complex" source="./media/seedwork-classes.png" alt-text="Screenshot of SeedWork folder.":::
 
-                    string tripleColonRegEx = @":::image[^:]*source=""([^:]*\.(png|gif|jpg|svg))""[^:]*:::";
+                    //string tripleColonRegEx = @":::image[^:]*source=""([^:]*\.(png|gif|jpg|svg))""[^:]*:::";
+                    string tripleColonRegEx = @":::image[^:]*source=""([^:]*?\.(png | gif | jpg | svg))""";
                     foreach (Match match in Regex.Matches(line, tripleColonRegEx, RegexOptions.IgnoreCase))
                     {
                         string path = match.Groups[1].Value.Trim();
