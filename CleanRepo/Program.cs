@@ -119,6 +119,29 @@ namespace CleanRepo
 
                     ListOrphanedIncludes(options.InputDirectory, includeFiles, options.Delete);
                 }
+                // Find orphaned .cs and .vb files
+                else if (options.FindOrphanedSnippets)
+                {
+                    if (String.IsNullOrEmpty(options.InputDirectory) || !Directory.Exists(options.InputDirectory))
+                    {
+                        Console.WriteLine("\nYou must specify a valid top-level directory in which to perform the clean up, e.g. c:\\repos\\dotnet-docs\\docs.");
+                        return;
+                    }
+
+                    string recursive = options.SearchRecursively ? "recursively " : "";
+                    Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory {recursive}for orphaned .cs and .vb files.");
+
+                    List<string> snippetFiles = GetSnippetFiles(options.InputDirectory, options.SearchRecursively);
+
+                    if (snippetFiles.Count == 0)
+                    {
+                        Console.WriteLine("\nNo .cs or .vb files were found.");
+                        return;
+                    }
+
+                    ListOrphanedSnippets(options.InputDirectory, snippetFiles, options.Delete);
+                }
+
                 // Clean master redirection file.
                 else if (options.CleanRedirectionFile)
                 {
@@ -605,6 +628,132 @@ namespace CleanRepo
             }
 
             return includeFiles;
+        }
+        #endregion
+
+        #region Orphaned snippets
+        /// <summary>
+        /// Returns a list of *.cs and *.vb files in the current directory, and optionally subdirectories.
+        /// </summary>
+        private static List<string> GetSnippetFiles(string inputDirectory, bool searchRecursively)
+        {
+            DirectoryInfo dir = new DirectoryInfo(inputDirectory);
+
+            SearchOption searchOption = searchRecursively ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
+
+            List<string> snippetFiles = new List<string>();
+
+            foreach (var file in dir.EnumerateFiles("*.cs"))
+            {
+                snippetFiles.Add(file.FullName.ToLower());
+            }
+            foreach (var file in dir.EnumerateFiles("*.vb"))
+            {
+                snippetFiles.Add(file.FullName.ToLower());
+            }
+
+            if (searchOption == SearchOption.AllDirectories)
+            {
+                foreach (var subDirectory in dir.EnumerateDirectories("*", SearchOption.AllDirectories))
+                {
+                    foreach (var file in subDirectory.EnumerateFiles("*.cs"))
+                    {
+                        snippetFiles.Add(file.FullName.ToLower());
+                    }
+                    foreach (var file in subDirectory.EnumerateFiles("*.vb"))
+                    {
+                        snippetFiles.Add(file.FullName.ToLower());
+                    }
+                }
+            }
+
+            return snippetFiles;
+        }
+
+        /// For each snippet file
+        ///    For each markdown file
+        ///       Do a RegEx search for the snippet file
+        ///          If found, BREAK to the next snippet file
+        private static void ListOrphanedSnippets(string inputDirectory, List<string> snippetFiles, bool deleteOrphanedSnippets)
+        {
+            // Get all files that could possibly link to the snippet files
+            var files = GetAllMarkdownFiles(inputDirectory, out DirectoryInfo rootDirectory);
+
+            if (files is null)
+            {
+                return;
+            }
+
+            int countOfOrphans = 0;
+            // Prints out the snippet files that have zero references.
+            StringBuilder output = new StringBuilder();
+
+            foreach (var snippetFile in snippetFiles)
+            {
+                FileInfo fi = new FileInfo(snippetFile);
+                string snippetFileName = fi.Name;
+
+                bool foundSnippetReference = false;
+
+                foreach (FileInfo markdownFile in files)
+                {
+                    // Matches the following types of snippet syntax:
+                    // :::code language="csharp" source="snippets/EventCounters/MinimalEventCounterSource.cs":::
+                    // [!code-csharp[Violation#1](../code-quality/codesnippet/CSharp/ca1010.cs)]
+
+                    string regex = @"(\(|"")([^\)""\n]*/" + snippetFileName + @")(\)|"")";
+
+                    Match match = Regex.Match(File.ReadAllText(markdownFile.FullName), regex);
+                    if (!(match is null))
+                    {
+                        string relativePath = match.Groups[2].Value.Trim();
+
+                        if (relativePath != null)
+                        {
+                            string fullPath;
+
+                            // Path could start with a tilde e.g. ~/snippets/ca1010.cs
+                            if (relativePath.StartsWith("~/"))
+                            {
+                                fullPath = Path.Combine(rootDirectory.FullName, relativePath.TrimStart('~', '/'));
+                            }
+                            else
+                            {
+                                // Construct the full path to the referenced snippet file
+                                fullPath = Path.Combine(markdownFile.DirectoryName, relativePath);
+                            }
+
+                            // Clean up the path by replacing forward slashes with back slashes, removing extra dots, etc.
+                            fullPath = Path.GetFullPath(fullPath);
+
+                            if (String.Equals(snippetFile, fullPath))
+                            {
+                                // This snippet file is not orphaned.
+                                foundSnippetReference = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (!foundSnippetReference)
+                {
+                    // The snippet file is orphaned (not used anywhere).
+                    countOfOrphans++;
+                    output.AppendLine(Path.GetFullPath(snippetFile));
+
+                    if (deleteOrphanedSnippets)
+                    {
+                        File.Delete(snippetFile);
+                    }
+                }
+            }
+
+            string deleted = deleteOrphanedSnippets ? "and deleted " : "";
+
+            Console.WriteLine($"\nFound {deleted}{countOfOrphans} orphaned snippet files:\n");
+            Console.WriteLine(output.ToString());
+            Console.WriteLine("DONE");
         }
         #endregion
 
@@ -1441,7 +1590,7 @@ namespace CleanRepo
                     }
                     catch (NotSupportedException)
                     {
-                        Console.WriteLine($"Found a possibly malformed link '{match.Groups[0].Value}' in '{linkingFile.FullName}'.\n");
+                        //Console.WriteLine($"Found a possibly malformed link '{match.Groups[0].Value}' in '{linkingFile.FullName}'.\n");
                         break;
                     }
 
