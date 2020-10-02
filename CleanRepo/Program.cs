@@ -228,7 +228,7 @@ namespace CleanRepo
 
                     // Check all links, including in toc.yml, to files in the redirects list.
                     // Replace links to redirected files.
-                    ReplaceRedirectedLinks(redirects, linkingFiles);
+                    ReplaceRedirectedLinks(redirects, linkingFiles, options.DocsetName);
 
                     Console.WriteLine("DONE");
                 }
@@ -303,7 +303,7 @@ namespace CleanRepo
                     if (siteRelativePath.IndexOf('?') >= 0)
                         continue;
 
-                    ReplaceLinkText(siteRelativePath, rootDirectory, linkingFile.FullName, match.Groups[0].Value, match.Groups[1].Value, docsetName);
+                    ReplaceLinkText(siteRelativePath, rootDirectory, linkingFile.FullName, match.Groups[0].Value, match.Groups[1].Value);
                 }
 
                 // Find links that look like <img src="/azure/mydocs/media/pic3.png">
@@ -314,7 +314,7 @@ namespace CleanRepo
                     // Get the first capture group, which is the part of the path after the docset name.
                     string siteRelativePath = match.Groups[2].Value;
 
-                    ReplaceLinkText(siteRelativePath, rootDirectory, linkingFile.FullName, match.Groups[0].Value, match.Groups[1].Value, docsetName);
+                    ReplaceLinkText(siteRelativePath, rootDirectory, linkingFile.FullName, match.Groups[0].Value, match.Groups[1].Value);
                 }
 
                 // Find links that look like [0]: /azure/mydocs/media/pic1.png
@@ -325,7 +325,7 @@ namespace CleanRepo
                     // Get the first capture group, which is the part of the path after the docset name.
                     string siteRelativePath = match.Groups[2].Value;
 
-                    ReplaceLinkText(siteRelativePath, rootDirectory, linkingFile.FullName, match.Groups[0].Value, match.Groups[1].Value, docsetName);
+                    ReplaceLinkText(siteRelativePath, rootDirectory, linkingFile.FullName, match.Groups[0].Value, match.Groups[1].Value);
                 }
 
                 // Find links that look like imageSrc: /azure/mydocs/media/pic1.png
@@ -336,7 +336,7 @@ namespace CleanRepo
                     // Get the first capture group, which is the part of the path after the docset name.
                     string siteRelativePath = match.Groups[2].Value;
 
-                    ReplaceLinkText(siteRelativePath, rootDirectory, linkingFile.FullName, match.Groups[0].Value, match.Groups[1].Value, docsetName);
+                    ReplaceLinkText(siteRelativePath, rootDirectory, linkingFile.FullName, match.Groups[0].Value, match.Groups[1].Value);
                 }
 
                 // Find links that look like :::image type="complex" source="/azure/mydocs/media/pic1.png" alt-text="Screenshot.":::
@@ -347,12 +347,12 @@ namespace CleanRepo
                     // Get the first capture group, which is the part of the path after the docset name.
                     string siteRelativePath = match.Groups[2].Value;
 
-                    ReplaceLinkText(siteRelativePath, rootDirectory, linkingFile.FullName, match.Groups[0].Value, match.Groups[1].Value, docsetName);
+                    ReplaceLinkText(siteRelativePath, rootDirectory, linkingFile.FullName, match.Groups[0].Value, match.Groups[1].Value);
                 }
             }
         }
 
-        private static void ReplaceLinkText(string siteRelativePath, string rootDirectory, string linkingFileName, string originalMatch, string originalLink, string docsetName)
+        private static void ReplaceLinkText(string siteRelativePath, string rootDirectory, string linkingFileName, string originalMatch, string originalLink)
         {
             // If the link contains a bookmark, trim it off and add it back later.
             // If there are two hash characters, this pattern is greedy and finds the last one.
@@ -1544,13 +1544,13 @@ namespace CleanRepo
             return redirects;
         }
 
-        private static void ReplaceRedirectedLinks(List<Redirect> redirects, List<FileInfo> linkingFiles)
+        private static void ReplaceRedirectedLinks(List<Redirect> redirects, List<FileInfo> linkingFiles, string docsetName)
         {
             Dictionary<string, Redirect> redirectLookup = Enumerable.ToDictionary<Redirect, string>(redirects, r => r.source_path);
 
             // For each file...
-            //foreach (var linkingFile in linkingFiles)
-            Parallel.ForEach(linkingFiles, linkingFile =>
+            foreach (var linkingFile in linkingFiles)
+            //Parallel.ForEach(linkingFiles, linkingFile =>
             {
                 bool foundOldLink = false;
                 StringBuilder output = new StringBuilder($"FILE '{linkingFile.FullName}' contains the following link(s) to redirected files:\n\n");
@@ -1567,6 +1567,22 @@ namespace CleanRepo
                 {
                     // Get the file-relative path to the linked file.
                     string relativePath = match.Groups[1].Value.Trim();
+
+                    if (relativePath.StartsWith("http"))
+                    {
+                        // This could be an absolute URL to a file in the repo, so check.
+                        string httpRegex = @"https?:\/\/docs.microsoft.com\/([A-z][A-z]-[A-z][A-z]\/)?" + docsetName + @"\/";
+                        var httpMatch = Regex.Match(relativePath, httpRegex, RegexOptions.IgnoreCase);
+
+                        if (!httpMatch.Success)
+                        {
+                            // The file is in a different repo, so ignore it.
+                            continue;
+                        }
+
+                        // Chop off the https://docs.microsoft.com/docset/ part of the path.
+                        relativePath = relativePath.Substring(httpMatch.Value.Length);
+                    }
 
                     // Remove any quotation marks
                     relativePath = relativePath.Replace("\"", "");
@@ -1611,16 +1627,15 @@ namespace CleanRepo
                             output.AppendLine($"REPLACING '({relativePath})' with '({redirectURL})'.");
 
                             // Replace the link.
-                            string newText = null;
                             if (linkingFile.Extension.ToLower() == ".md")
                             {
-                                newText = text.Replace(match.Groups[0].Value, $"]({redirectURL})");
+                                text = text.Replace(match.Groups[0].Value, $"]({redirectURL})");
                             }
                             else // .yml file
                             {
-                                newText = text.Replace(match.Groups[0].Value, $"href: {redirectURL}");
+                                text = text.Replace(match.Groups[0].Value, $"href: {redirectURL}");
                             }
-                            File.WriteAllText(linkingFile.FullName, newText);
+                            File.WriteAllText(linkingFile.FullName, text);
                         }
                     }
                 }
@@ -1629,7 +1644,7 @@ namespace CleanRepo
                 {
                     Console.WriteLine(output.ToString());
                 }
-            });
+            }
             //}
         }
         #endregion
