@@ -372,7 +372,7 @@ namespace CleanRepo
             absolutePath = Path.GetFullPath(absolutePath);
 
             FileInfo file = new FileInfo(absolutePath);
-            if (String.IsNullOrEmpty(file.Extension))
+            if (String.IsNullOrEmpty(file.Extension) || !string.Equals(file.Extension, ".md") || !string.Equals(file.Extension, ".yml"))
             {
                 // Look for a file of this name in the same directory to obtain its extension.
                 try
@@ -401,7 +401,14 @@ namespace CleanRepo
             // Check that the link is valid in the local repo.
             if (!File.Exists(absolutePath))
             {
-                return;
+                // Assume this is for an index file that was left off the URL.
+                absolutePath = Path.Combine(absolutePath, "index.md");
+
+                // If it's still not a valid file, bow out.
+                if (!File.Exists(absolutePath))
+                {
+                    return;
+                }
             }
 
             if (absolutePath != null)
