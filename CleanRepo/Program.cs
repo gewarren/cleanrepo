@@ -813,6 +813,7 @@ namespace CleanRepo
                     <img src="/azure/mydocs/media/pic3.png" alt="Work Backlogs page shortcuts"/>
                     [0]: ../../media/vs-acr-provisioning-dialog-2019.png
                     :::image type="complex" source="./media/seedwork-classes.png" alt-text="Screenshot of the SeedWork folder.":::
+                    :::image type="content" source="../media/rpi.png" lightbox="../media/rpi-lightbox.png":::
                     *
                     * Does not currently support file names that contain parentheses:
                     * [VS image](../media/pic(azure)_1.png)
@@ -904,7 +905,7 @@ namespace CleanRepo
                     {
                         string path = match.Groups[1].Value.Trim();
 
-                        if (path.StartsWith("http"))
+                        if (path.StartsWith("http:") || path.StartsWith("https:"))
                         {
                             // The file is not in this repo, so ignore it.
                             continue;
@@ -958,7 +959,7 @@ namespace CleanRepo
                     {
                         string path = match.Groups[1].Value.Trim();
 
-                        if (path.StartsWith("http"))
+                        if (path.StartsWith("http:") || path.StartsWith("https:"))
                         {
                             // The file is not in this repo, so ignore it.
                             continue;
@@ -1012,7 +1013,7 @@ namespace CleanRepo
                     {
                         string path = match.Groups[1].Value.Trim();
 
-                        if (path.StartsWith("http"))
+                        if (path.StartsWith("http:") || path.StartsWith("https:"))
                         {
                             // The file is not in this repo, so ignore it.
                             continue;
@@ -1060,55 +1061,60 @@ namespace CleanRepo
 
                     // Match ::: image links
                     // Example: :::image type="complex" source="./media/seedwork-classes.png" alt-text="Screenshot of SeedWork folder.":::
+                    // Example :::image type = "content" lightbox="../media/rpi-lightbox.png":::
 
-                    //string tripleColonRegEx = @":::image[^:]*source=""([^:]*\.(png|gif|jpg|svg))""[^:]*:::";
-                    string tripleColonRegEx = @":::image[^:]*source=""([^:]*?\.(png|gif|jpg|svg))""";
+                    string tripleColonRegEx = @":::image .*?source=""[^:]*?\.(png|gif|jpg|svg)""[^:]*?:::";
                     foreach (Match match in Regex.Matches(line, tripleColonRegEx, RegexOptions.IgnoreCase))
                     {
-                        string path = match.Groups[1].Value.Trim();
-
-                        if (path.StartsWith("http"))
+                        // There could be two images in this string - a source image and a lightbox image.
+                        string sourceOrLightboxRegEx = @"(source|lightbox)=""(.*?\.(png|gif|jpg|svg))""";
+                        foreach (Match submatch in Regex.Matches(match.Groups[0].Value, sourceOrLightboxRegEx, RegexOptions.IgnoreCase))
                         {
-                            // The file is not in this repo, so ignore it.
-                            continue;
-                        }
+                            string path = submatch.Groups[2].Value.Trim();
 
-                        if (path.StartsWith("/"))
-                        {
-                            if (!path.StartsWith("/" + docsetName + "/"))
+                            if (path.StartsWith("http:") || path.StartsWith("https:"))
                             {
-                                // The file is in a different repo, so ignore it.
+                                // The file is not in this repo, so ignore it.
                                 continue;
                             }
 
-                            // Trim off the docset name, but leave the forward slash that follows it.
-                            path = path.Substring(docsetName.Length + 1);
-                        }
-
-                        if (path != null)
-                        {
-                            string absolutePath;
-
-                            // Path could start with a tilde e.g. ~/media/pic1.png
-                            // This case also includes site-relative links to files in the same repo where
-                            // we've already trimmed off the docset name.
-                            if (path.StartsWith("~/") || path.StartsWith("/"))
+                            if (path.StartsWith("/"))
                             {
-                                // Construct the full path to the referenced image file
-                                absolutePath = Path.Combine(rootDirectory.FullName, path.TrimStart('~', '/'));
-                            }
-                            else
-                            {
-                                // Construct the full path to the referenced image file
-                                absolutePath = Path.Combine(file.DirectoryName, path);
+                                if (!path.StartsWith("/" + docsetName + "/"))
+                                {
+                                    // The file is in a different repo, so ignore it.
+                                    continue;
+                                }
+
+                                // Trim off the docset name, but leave the forward slash that follows it.
+                                path = path.Substring(docsetName.Length + 1);
                             }
 
-                            // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
-                            absolutePath = TryGetFullPath(absolutePath);
-
-                            if (absolutePath != null)
+                            if (path != null)
                             {
-                                TryIncrementFile(absolutePath, imageFiles);
+                                string absolutePath;
+
+                                // Path could start with a tilde e.g. ~/media/pic1.png
+                                // This case also includes site-relative links to files in the same repo where
+                                // we've already trimmed off the docset name.
+                                if (path.StartsWith("~/") || path.StartsWith("/"))
+                                {
+                                    // Construct the full path to the referenced image file
+                                    absolutePath = Path.Combine(rootDirectory.FullName, path.TrimStart('~', '/'));
+                                }
+                                else
+                                {
+                                    // Construct the full path to the referenced image file
+                                    absolutePath = Path.Combine(file.DirectoryName, path);
+                                }
+
+                                // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
+                                absolutePath = TryGetFullPath(absolutePath);
+
+                                if (absolutePath != null)
+                                {
+                                    TryIncrementFile(absolutePath, imageFiles);
+                                }
                             }
                         }
                     }
