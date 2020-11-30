@@ -24,14 +24,20 @@ namespace CleanRepo
         [Option("orphaned-includes", HelpText = "Find orphaned INCLUDE files.")]
         public bool FindOrphanedIncludes { get; set; }
 
-        [Option('g', "delete", DefaultValue = false, Required = false, HelpText = "Delete orphaned markdown or .png/.jpg/.gif/.svg files.")]
+        [Option('g', "delete", Default = false, Required = false, HelpText = "Delete orphaned markdown or .png/.jpg/.gif/.svg files.")]
         public bool Delete { get; set; }
 
-        [Option("clean-redirects", Required = false, HelpText = "Clean redirection JSON file by replacing targets that are themselves redirected.")]
-        public bool CleanRedirectionFile { get; set; }
+        [Option("remove-hops", Required = false, HelpText = "Clean redirection JSON file by replacing targets that are themselves redirected (bunny hops).")]
+        public bool RemoveRedirectHops { get; set; }
 
         [Option("replace-redirects", Required = false, HelpText = "Find backlink to redirected files and replace with new target.")]
         public bool ReplaceRedirectTargets { get; set; }
+
+        [Option("trim-redirects", Required = false, HelpText = "Remove redirect entries for links that haven't been clicked in the specified number of days.")]
+        public bool TrimRedirectsFile { get; set; }
+
+        [Option("lookback-days", Default = 90, HelpText = "The number of days to check for link-click activity. The default is 90 days.")]
+        public int LinkActivityDays { get; set; }
 
         [Option("redirects-file", Required = false, HelpText = "Optionally specify a path to a redirect JSON file in a different repo.")]
         public string RedirectsFile { get; set; }
@@ -45,17 +51,7 @@ namespace CleanRepo
         [Option("docset-root", Required = false, HelpText = "The full path to the root directory for the docset, e.g. 'c:\\users\\gewarren\\dotnet-docs\\docs'.")]
         public string DocsetRoot { get; set; }
 
-        [Option('s', "recursive", DefaultValue = true, Required = false, HelpText = "Search directory and all subdirectories for markdown, yaml, image, and include files (depending on chosen function).")]
+        [Option('s', "recursive", Default = true, Required = false, HelpText = "Search directory and all subdirectories for markdown, yaml, image, and include files (depending on chosen function).")]
         public bool SearchRecursively { get; set; }
-
-        [ParserState]
-        public IParserState LastParserState { get; set; }
-
-        [HelpOption]
-        public string GetUsage()
-        {
-            return HelpText.AutoBuild(this,
-              (HelpText current) => HelpText.DefaultParsingErrorsHandler(this, current));
-        }
     }
 }
