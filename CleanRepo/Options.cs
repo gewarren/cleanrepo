@@ -30,14 +30,17 @@ namespace CleanRepo
         [Option("remove-hops", Required = false, HelpText = "Clean redirection JSON file by replacing targets that are themselves redirected (bunny hops).")]
         public bool RemoveRedirectHops { get; set; }
 
-        [Option("replace-redirects", Required = false, HelpText = "Find backlink to redirected files and replace with new target.")]
+        [Option("replace-redirects", Required = false, HelpText = "Find backlinks to redirected files and replace with new target.")]
         public bool ReplaceRedirectTargets { get; set; }
 
         [Option("trim-redirects", Required = false, HelpText = "Remove redirect entries for links that haven't been clicked in the specified number of days.")]
         public bool TrimRedirectsFile { get; set; }
 
-        [Option("lookback-days", Default = 90, HelpText = "The number of days to check for link-click activity. The default is 90 days.")]
+        [Option("lookback-days", Default = 90, HelpText = "The number of days to check for link-click activity.")]
         public int LinkActivityDays { get; set; }
+
+        [Option("output-file", HelpText = "The file to write the output to.")]
+        public string OutputFilePath { get; set; }
 
         [Option("redirects-file", Required = false, HelpText = "Optionally specify a path to a redirect JSON file in a different repo.")]
         public string RedirectsFile { get; set; }

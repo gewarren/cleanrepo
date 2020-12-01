@@ -1,13 +1,14 @@
 ﻿using CleanRepo.Extensions;
 using CommandLine;
 using Kusto.Data;
-using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
@@ -19,6 +20,10 @@ namespace CleanRepo
     {
         static void Main(string[] args)
         {
+#if DEBUG
+            args = new[] { "--trim-redirects","--docset-name=dotnet", "--docset-root=c:\\users\\gewarren\\dotnet-docs\\docs", "--lookback-days=90", "--output-file=c:\\users\\gewarren\\desktop\\clicks.txt" };
+#endif
+
             Parser.Default.ParseArguments<Options>(args).WithParsed(RunOptions);
         }
 
@@ -196,6 +201,11 @@ namespace CleanRepo
                     Console.WriteLine("\nYou must specify a valid docset root for this repo when trimming the redirection file.");
                     return;
                 }
+                if (String.IsNullOrEmpty(options.OutputFilePath))
+                {
+                    Console.WriteLine("\nYou must specify an output file to record link-click activity.");
+                    return;
+                }
 
                 FileInfo redirectsFile;
                 if (String.IsNullOrEmpty(options.RedirectsFile))
@@ -218,7 +228,7 @@ namespace CleanRepo
                 string docsetRootFolder = dirInfo.Name;
 
                 Console.WriteLine($"\nTrimming links in the '{redirectsFile.FullName}' file that haven't been clicked in the last {days} days.\n");
-                TrimRedirectEntries(redirectsFile, options.DocsetName, docsetRootFolder, days);
+                TrimRedirectEntries(redirectsFile, options.DocsetName, docsetRootFolder, days, options.OutputFilePath);
             }
             // Replace links to topics that are redirected in the master redirection file
             else if (options.ReplaceRedirectTargets)
@@ -229,7 +239,7 @@ namespace CleanRepo
                     return;
                 }
 
-                Console.WriteLine("\nIt's highly recommended to run the --clean-redirects option before replacing redirect links. Do you want to continue? y or n");
+                Console.WriteLine("\nIt's highly recommended to run the --remove-hops option before replacing redirect links. Do you want to continue? y or n");
                 var info = Console.ReadKey();
                 if (info.KeyChar != 'y' && info.KeyChar != 'Y')
                 {
@@ -1276,9 +1286,9 @@ namespace CleanRepo
         // TODO: Use a tuple instead
         private class Redirect
         {
-            public string source_path;
-            public string redirect_url;
-            public bool redirect_document_id;
+            public string source_path { get; set; }
+            public string redirect_url { get; set; }
+            public bool? redirect_document_id { get; set; }
         }
 
         private static FileInfo GetRedirectsFile(string inputDirectory)
@@ -1308,8 +1318,14 @@ namespace CleanRepo
 
         private static void WriteRedirectJson(FileInfo redirectsFile, List<Redirect> redirects)
         {
-            string json = JsonConvert.SerializeObject(redirects);
-            File.WriteAllText(redirectsFile.FullName, json);
+            JsonSerializerOptions options = new()
+            {
+                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+                WriteIndented = true
+            };
+
+            string json = JsonSerializer.Serialize(redirects, options);
+            File.WriteAllText(redirectsFile.FullName, @"{ ""redirections"":" + json + "}");
         }
 
         private static List<Redirect> LoadRedirectJson(FileInfo redirectsFile)
@@ -1325,9 +1341,9 @@ namespace CleanRepo
 
                 try
                 {
-                    return JsonConvert.DeserializeObject<List<Redirect>>(json);
+                    return JsonSerializer.Deserialize<List<Redirect>>(json);
                 }
-                catch (JsonReaderException e)
+                catch (JsonException e)
                 {
                     Console.WriteLine($"Caught exception while reading JSON file: {e.Message}");
                     return null;
@@ -1339,7 +1355,7 @@ namespace CleanRepo
         /// For each source path in a redirect entry, check if it's been clicked in any locale
         /// in the last X days. If not, remove the redirect entry from the redirection file.
         /// </summary>
-        private static void TrimRedirectEntries(FileInfo redirectsFile, string docsetName, string docsetRootFolderName, int lookbackDays)
+        private static void TrimRedirectEntries(FileInfo redirectsFile, string docsetName, string docsetRootFolderName, int lookbackDays, string outputFile)
         {
             List<Redirect> redirects = LoadRedirectJson(redirectsFile);
             if (redirects is null)
@@ -1353,10 +1369,15 @@ namespace CleanRepo
             KustoConnectionStringBuilder builder = new KustoConnectionStringBuilder("https://cgadataout.kusto.windows.net/;Fed=true", "CustomerTouchPoint");
             var client = Kusto.Data.Net.Client.KustoClientFactory.CreateCslQueryProvider(builder);
 
-            foreach (var redirect in redirects)
+            // For link-click output.
+            var sb = new StringBuilder();
+
+            for (int i = 0; i < redirects.Count && i < 250; i++)
             {
+                Redirect redirect = redirects[i];
+
                 // Trim off ".md".
-                string trimmedPath = redirect.source_path.Substring(0, redirect.source_path.Length - 3);
+                string trimmedPath = redirect.source_path[0..^3];
 
                 // Trim off the first part of the path e.g. "docs" or articles".
                 trimmedPath = trimmedPath.Substring(trimmedPath.IndexOf('/') + 1);
@@ -1365,6 +1386,7 @@ namespace CleanRepo
                 string sourcePathUrl = $"/{docsetName}/{trimmedPath}";
 
                 long clicks = NumberOfClicks(sourcePathUrl);
+                sb.AppendLine($"{sourcePathUrl}\t{clicks}");
 
                 if (clicks == 0)
                 {
@@ -1375,14 +1397,16 @@ namespace CleanRepo
             // Remove any defunct redirects.
             foreach (var redirect in noClickRedirects)
             {
-                Console.WriteLine($"Removing redirect entry for {redirect.source_path} due to inactivity.");
-                redirects.Remove(redirect);
+                redirects.Remove( redirect);
             }
 
             // Serialize the new list of redirects to the file.
             WriteRedirectJson(redirectsFile, redirects);
 
-            Console.WriteLine($"\nRemoved a total of {noClickRedirects.Count} inactive redirect entries.");
+            // Write link-click output.
+            File.WriteAllText(outputFile, sb.ToString());
+
+            Console.WriteLine($"\nRemoved a total of {noClickRedirects.Count} inactive redirect entries. Tab-separated page view data written to {outputFile}.");
 
             long NumberOfClicks(string url)
             {
