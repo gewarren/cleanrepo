@@ -25,8 +25,8 @@ This command-line tool helps you clean up a DocFx-based content repo. It can:
 | -g, --delete | (Default: False) Delete orphaned markdown or .png/.jpg/.gif files. |
 | --remove-hops | Replace redirect targets that are themselves redirected. |
 | --replace-redirects | Find backlinks to redirected files and replace with new target. |
-| --trim-redirects | Remove redirect entries for links that haven't been clicked in the specified number of days. |
-| --lookback-days | (Default: 90) The number of days to check for link-click activity. |
+| --trim-redirects | Remove redirect entries for pages that haven't been viewed in the specified number of days. |
+| --lookback-days | (Default: 90) The number of days to check for page-view activity. |
 | --redirects-file | Optionally specify a path to a redirect JSON file in a different repo. |
 | --relative-links | Replace site-relative links with file-relative links.  You must also specify the docset name for the repo. |
 | --docset-name | The docset name that corresponds to the root of this repo in a URL, e.g. 'visualstudio' in 'http://docs.microsoft.com/visualstudio/ide/get-started'. |
