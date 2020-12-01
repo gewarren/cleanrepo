@@ -3,6 +3,7 @@ using CommandLine;
 using Kusto.Data;
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -266,7 +267,7 @@ namespace CleanRepo
                 }
 
                 // Put all the redirected files in a list
-                List<Redirect> redirects = GetAllRedirectedFiles(redirectsFile);
+                IList<Redirect> redirects = GetAllRedirectedFiles(redirectsFile);
                 if (redirects is null)
                 {
                     Console.WriteLine("\nDid not find any redirects - exiting.");
@@ -1283,12 +1284,16 @@ namespace CleanRepo
         #endregion
 
         #region Redirected files
-        // TODO: Use a tuple instead
-        private class Redirect
+        class RedirectFile
+        {
+            public IList<Redirect> redirections { get; set; }
+        }
+
+        class Redirect
         {
             public string source_path { get; set; }
             public string redirect_url { get; set; }
-            public bool? redirect_document_id { get; set; }
+            public bool? redirect_id { get; set; }
         }
 
         private static FileInfo GetRedirectsFile(string inputDirectory)
@@ -1316,7 +1321,7 @@ namespace CleanRepo
             }
         }
 
-        private static void WriteRedirectJson(FileInfo redirectsFile, List<Redirect> redirects)
+        private static void WriteRedirectJson(string filePath, RedirectFile redirects)
         {
             JsonSerializerOptions options = new()
             {
@@ -1325,23 +1330,18 @@ namespace CleanRepo
             };
 
             string json = JsonSerializer.Serialize(redirects, options);
-            File.WriteAllText(redirectsFile.FullName, @"{ ""redirections"":" + json + "}");
+            File.WriteAllText(filePath, json);
         }
 
-        private static List<Redirect> LoadRedirectJson(FileInfo redirectsFile)
+        private static RedirectFile LoadRedirectJson(FileInfo redirectsFile)
         {
             using (StreamReader reader = new StreamReader(redirectsFile.FullName))
             {
                 string json = reader.ReadToEnd();
 
-                // Trim the string so we're just left with an array of redirect objects
-                json = json.Trim();
-                json = json.Substring(json.IndexOf('['));
-                json = json.TrimEnd('}');
-
                 try
                 {
-                    return JsonSerializer.Deserialize<List<Redirect>>(json);
+                    return JsonSerializer.Deserialize<RedirectFile>(json);
                 }
                 catch (JsonException e)
                 {
@@ -1355,10 +1355,10 @@ namespace CleanRepo
         /// For each source path in a redirect entry, check if it's been clicked in any locale
         /// in the last X days. If not, remove the redirect entry from the redirection file.
         /// </summary>
-        private static void TrimRedirectEntries(FileInfo redirectsFile, string docsetName, string docsetRootFolderName, int lookbackDays, string outputFile)
+        private static void TrimRedirectEntries(FileInfo redirectsFileInfo, string docsetName, string docsetRootFolderName, int lookbackDays, string outputFile)
         {
-            List<Redirect> redirects = LoadRedirectJson(redirectsFile);
-            if (redirects is null)
+            RedirectFile redirectFile = LoadRedirectJson(redirectsFileInfo);
+            if (redirectFile is null)
             {
                 return;
             }
@@ -1372,15 +1372,16 @@ namespace CleanRepo
             // For link-click output.
             var sb = new StringBuilder();
 
-            for (int i = 0; i < redirects.Count && i < 250; i++)
+            //for (int i = 0; i < redirectFile.redirections.Count && i < 50; i++)
+            for (int i = 0; i < redirectFile.redirections.Count; i++)
             {
-                Redirect redirect = redirects[i];
+                Redirect redirect = redirectFile.redirections[i];
 
                 // Trim off ".md".
                 string trimmedPath = redirect.source_path[0..^3];
 
                 // Trim off the first part of the path e.g. "docs" or articles".
-                trimmedPath = trimmedPath.Substring(trimmedPath.IndexOf('/') + 1);
+                trimmedPath = trimmedPath[(trimmedPath.IndexOf('/') + 1)..];
 
                 // Construct the URL to the article.
                 string sourcePathUrl = $"/{docsetName}/{trimmedPath}";
@@ -1397,13 +1398,13 @@ namespace CleanRepo
             // Remove any defunct redirects.
             foreach (var redirect in noClickRedirects)
             {
-                redirects.Remove( redirect);
+                redirectFile.redirections.Remove(redirect);
             }
 
             // Serialize the new list of redirects to the file.
-            WriteRedirectJson(redirectsFile, redirects);
+            WriteRedirectJson(redirectsFileInfo.FullName, redirectFile);
 
-            // Write link-click output.
+            // Write the link-click output to a file.
             File.WriteAllText(outputFile, sb.ToString());
 
             Console.WriteLine($"\nRemoved a total of {noClickRedirects.Count} inactive redirect entries. Tab-separated page view data written to {outputFile}.");
@@ -1415,18 +1416,27 @@ namespace CleanRepo
                 string query = @"PageView | where Site == ""docs.microsoft.com"" | where StartDateTime > ago(" + lookbackDays +
                     @"d) | where Url endswith """ + url + @""" | count";
 
-                using var reader = client.ExecuteQuery(query);
+                IDataReader reader = null;
+                try
+                {
+                    reader = client.ExecuteQuery(query);
+                }
+                catch (Kusto.Cloud.Platform.Data.DataTableIncompleteDataStreamException)
+                {
+                    // Just ignore this redirect for now.
+                    Console.WriteLine("Caught DataTableIncompleteDataStreamException. Will continue on with the next redirect.");
+                }
 
-                if (reader.FieldCount == 1)
+                if (reader != null && reader.FieldCount == 1)
                 {
                     while (reader.Read())
                     {
                         numClicks = reader.GetInt64(reader.GetOrdinal("Count"));
                     }
-                }
 
-                // Call Close when done reading.
-                reader.Close();
+                    // Call Close when done reading.
+                    reader.Close();
+                }
 
                 return numClicks;
             }
@@ -1438,17 +1448,17 @@ namespace CleanRepo
         /// </summary>
         private static void RemoveRedirectHops(FileInfo redirectsFile, string docsetName, string docsetRootFolderName)
         {
-            List<Redirect> redirects = LoadRedirectJson(redirectsFile);
+            RedirectFile redirectFile = LoadRedirectJson(redirectsFile);
             string fileText = File.ReadAllText(redirectsFile.FullName);
 
-            if (redirects is null)
+            if (redirectFile is null)
             {
                 return;
             }
 
             // Load the sources and targets into a dictionary for easier look up.
-            Dictionary<string, string> redirectsLookup = new Dictionary<string, string>(redirects.Count);
-            foreach (Redirect redirect in redirects)
+            Dictionary<string, string> redirectsLookup = new Dictionary<string, string>(redirectFile.redirections.Count);
+            foreach (Redirect redirect in redirectFile.redirections)
             {
                 redirectsLookup.Add(redirect.source_path, redirect.redirect_url);
             }
@@ -1498,16 +1508,16 @@ namespace CleanRepo
             File.WriteAllText(redirectsFile.FullName, fileText);
         }
 
-        private static List<Redirect> GetAllRedirectedFiles(FileInfo redirectsFile)
+        private static IList<Redirect> GetAllRedirectedFiles(FileInfo redirectsFile)
         {
-            List<Redirect> redirects = LoadRedirectJson(redirectsFile);
+            RedirectFile redirectFile = LoadRedirectJson(redirectsFile);
 
-            if (redirects is null)
+            if (redirectFile is null)
             {
                 return null;
             }
 
-            foreach (Redirect redirect in redirects)
+            foreach (Redirect redirect in redirectFile.redirections)
             {
                 if (redirect.source_path != null)
                 {
@@ -1521,16 +1531,15 @@ namespace CleanRepo
                 }
             }
 
-            return redirects;
+            return redirectFile.redirections;
         }
 
-        private static void ReplaceRedirectedLinks(List<Redirect> redirects, List<FileInfo> linkingFiles, string docsetName)
+        private static void ReplaceRedirectedLinks(IList<Redirect> redirects, List<FileInfo> linkingFiles, string docsetName)
         {
             Dictionary<string, Redirect> redirectLookup = Enumerable.ToDictionary<Redirect, string>(redirects, r => r.source_path);
 
             // For each file...
             foreach (var linkingFile in linkingFiles)
-            //Parallel.ForEach(linkingFiles, linkingFile =>
             {
                 bool foundOldLink = false;
                 StringBuilder output = new StringBuilder($"FILE '{linkingFile.FullName}' contains the following link(s) to redirected files:\n\n");
@@ -1625,7 +1634,6 @@ namespace CleanRepo
                     Console.WriteLine(output.ToString());
                 }
             }
-            //}
         }
         #endregion
 
