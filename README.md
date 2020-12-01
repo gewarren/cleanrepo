@@ -25,6 +25,7 @@ This command-line tool helps you clean up a DocFx-based content repo. It can:
 | -g, --delete | (Default: False) Delete orphaned markdown or .png/.jpg/.gif files. |
 | --remove-hops | Replace redirect targets that are themselves redirected. |
 | --replace-redirects | Find backlinks to redirected files and replace with new target. |
+| --format-redirects | Format the redirection JSON file by deserializing and then serializing with pretty printing. （Recommend doing this before --trim-redirects to make the trimming diff useful.) |
 | --trim-redirects | Remove redirect entries for pages that haven't been viewed in the specified number of days. |
 | --lookback-days | (Default: 90) The number of days to check for page-view activity. |
 | --redirects-file | Optionally specify a path to a redirect JSON file in a different repo. |
@@ -63,6 +64,12 @@ Find and delete shared markdown files that are orphaned (recursive):
 
 ```
 CleanRepo.exe --orphaned-includes -g -d c:\repos\visualstudio-docs-pr\docs\ide
+```
+
+Format the redirection JSON file with pretty printing serialization.
+
+```bash
+CleanRepo.exe --format-redirects --docset-root c:\users\gewarren\dotnet-docs\docs
 ```
 
 Remove entries in the .openpublishing.redirection.json file that haven't been clicked in the last 180 days:
