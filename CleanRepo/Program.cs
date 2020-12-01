@@ -176,7 +176,7 @@ namespace CleanRepo
 
                 if (redirectsFile == null)
                 {
-                    Console.WriteLine($"\nCould not find redirects file for directory '{options.DocsetRoot}'.");
+                    Console.WriteLine($"\nCould not find redirection file for directory '{options.DocsetRoot}'.");
                     return;
                 }
 
@@ -186,7 +186,38 @@ namespace CleanRepo
                 Console.WriteLine($"\nCleaning the '{redirectsFile.FullName}' redirection file.\n");
                 RemoveRedirectHops(redirectsFile, options.DocsetName, docsetRootFolder);
             }
+            // Format master redirection file.
+            else if (options.FormatRedirectsFile)
+            {
+                if (String.IsNullOrEmpty(options.DocsetRoot) || !Directory.Exists(options.DocsetRoot))
+                {
+                    Console.WriteLine("\nYou must specify a valid docset root for this repo when trimming the redirection file.");
+                    return;
+                }
 
+                FileInfo redirectsFile;
+                if (String.IsNullOrEmpty(options.RedirectsFile))
+                {
+                    // Find the .openpublishing.redirection.json file for the directory
+                    redirectsFile = GetRedirectsFile(options.DocsetRoot);
+                }
+                else
+                {
+                    redirectsFile = new FileInfo(options.RedirectsFile);
+                }
+
+                if (redirectsFile == null)
+                {
+                    Console.WriteLine($"\nCould not find redirection file for directory '{options.DocsetRoot}'.");
+                    return;
+                }
+
+                DirectoryInfo dirInfo = new DirectoryInfo(options.DocsetRoot);
+                string docsetRootFolder = dirInfo.Name;
+
+                Console.WriteLine($"\nFormatting the '{redirectsFile.FullName}' file.\n");
+                FormatRedirectionFile(redirectsFile);
+            }
             // Trim master redirection file.
             else if (options.TrimRedirectsFile)
             {
@@ -221,7 +252,7 @@ namespace CleanRepo
 
                 if (redirectsFile == null)
                 {
-                    Console.WriteLine($"\nCould not find redirects file for directory '{options.DocsetRoot}'.");
+                    Console.WriteLine($"\nCould not find redirection file for directory '{options.DocsetRoot}'.");
                     return;
                 }
 
@@ -229,7 +260,7 @@ namespace CleanRepo
                 string docsetRootFolder = dirInfo.Name;
 
                 Console.WriteLine($"\nTrimming links in the '{redirectsFile.FullName}' file that haven't been clicked in the last {days} days.\n");
-                TrimRedirectEntries(redirectsFile, options.DocsetName, docsetRootFolder, days, options.OutputFilePath);
+                TrimRedirectEntries(redirectsFile, options.DocsetName, days, options.OutputFilePath);
             }
             // Replace links to topics that are redirected in the master redirection file
             else if (options.ReplaceRedirectTargets)
@@ -1293,7 +1324,7 @@ namespace CleanRepo
         {
             public string source_path { get; set; }
             public string redirect_url { get; set; }
-            public bool? redirect_id { get; set; }
+            public bool? redirect_document_id { get; set; }
         }
 
         private static FileInfo GetRedirectsFile(string inputDirectory)
@@ -1351,15 +1382,30 @@ namespace CleanRepo
             }
         }
 
+        private static void FormatRedirectionFile(FileInfo redirectsFileInfo)
+        {
+            // Deserialize the redirect entries.
+            RedirectFile redirectFile = LoadRedirectJson(redirectsFileInfo);
+            if (redirectFile is null)
+            {
+                Console.WriteLine("Deserialization failed.");
+                return;
+            }
+
+            // Serialize the redirects back to the file.
+            WriteRedirectJson(redirectsFileInfo.FullName, redirectFile);
+        }
+
         /// <summary>
         /// For each source path in a redirect entry, check if it's been clicked in any locale
         /// in the last X days. If not, remove the redirect entry from the redirection file.
         /// </summary>
-        private static void TrimRedirectEntries(FileInfo redirectsFileInfo, string docsetName, string docsetRootFolderName, int lookbackDays, string outputFile)
+        private static void TrimRedirectEntries(FileInfo redirectsFileInfo, string docsetName, int lookbackDays, string outputFile)
         {
             RedirectFile redirectFile = LoadRedirectJson(redirectsFileInfo);
             if (redirectFile is null)
             {
+                Console.WriteLine("Deserialization failed.");
                 return;
             }
 
@@ -1372,7 +1418,7 @@ namespace CleanRepo
             // For link-click output.
             var sb = new StringBuilder();
 
-            //for (int i = 0; i < redirectFile.redirections.Count && i < 50; i++)
+            //for (int i = 0; i < redirectFile.redirections.Count && i < 100; i++)
             for (int i = 0; i < redirectFile.redirections.Count; i++)
             {
                 Redirect redirect = redirectFile.redirections[i];
@@ -1453,6 +1499,7 @@ namespace CleanRepo
 
             if (redirectFile is null)
             {
+                Console.WriteLine("Deserialization failed.");
                 return;
             }
 
@@ -1514,6 +1561,7 @@ namespace CleanRepo
 
             if (redirectFile is null)
             {
+                Console.WriteLine("Deserialization failed.");
                 return null;
             }
 

@@ -33,6 +33,9 @@ namespace CleanRepo
         [Option("replace-redirects", Required = false, HelpText = "Find backlinks to redirected files and replace with new target.")]
         public bool ReplaceRedirectTargets { get; set; }
 
+        [Option("format-redirects", Required = false, HelpText = "Format the redirection JSON file by deserializing and then serializing with pretty printing.")]
+        public bool FormatRedirectsFile { get; set; }
+
         [Option("trim-redirects", Required = false, HelpText = "Remove redirect entries for links that haven't been clicked in the specified number of days.")]
         public bool TrimRedirectsFile { get; set; }
 
