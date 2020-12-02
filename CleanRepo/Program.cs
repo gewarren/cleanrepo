@@ -1,6 +1,8 @@
 ﻿using CleanRepo.Extensions;
 using CommandLine;
+using Kusto.Cloud.Platform.Data;
 using Kusto.Data;
+using Kusto.Data.Exceptions;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -1418,13 +1420,19 @@ namespace CleanRepo
             // For link-click output.
             var sb = new StringBuilder();
 
-            //for (int i = 0; i < redirectFile.redirections.Count && i < 100; i++)
+            //for (int i = 0; i < redirectFile.redirections.Count && i < 50; i++)
             for (int i = 0; i < redirectFile.redirections.Count; i++)
             {
                 Redirect redirect = redirectFile.redirections[i];
 
-                // Trim off ".md".
-                string trimmedPath = redirect.source_path[0..^3];
+                // Trim off the file extension.
+                string trimmedPath = redirect.source_path[0..redirect.source_path.LastIndexOf('.')];
+
+                // If the file name is exactly "index", remove it from the URL.
+                if (String.Compare(trimmedPath[(trimmedPath.LastIndexOf('/') + 1)..].ToLowerInvariant(), "index") == 0)
+                {
+                    trimmedPath = trimmedPath[0..(trimmedPath.LastIndexOf('/') + 1)];
+                }
 
                 // Trim off the first part of the path e.g. "docs" or articles".
                 trimmedPath = trimmedPath[(trimmedPath.IndexOf('/') + 1)..];
@@ -1432,12 +1440,61 @@ namespace CleanRepo
                 // Construct the URL to the article.
                 string sourcePathUrl = $"/{docsetName}/{trimmedPath}";
 
-                long clicks = NumberOfClicks(sourcePathUrl);
-                sb.AppendLine($"{sourcePathUrl}\t{clicks}");
+                long clicks = -1;
+                try
+                {
+                    clicks = NumberOfClicks(sourcePathUrl);
+                }
+                catch (Exception ex)
+                {
+                    if (ex is KustoClientException || ex is KustoServiceException)
+                    {
+                        // Finish up with the data we have and then exit.
+                        break;
+                    }
 
+                    throw;
+                }
+
+                // Differentiate between invalid URL and no page views
                 if (clicks == 0)
                 {
-                    noClickRedirects.Add(redirect);
+                    string liveUrl = String.Concat("https://docs.microsoft.com/en-us", sourcePathUrl);
+                    bool isValidUrl = false;
+
+                    try
+                    {
+                        isValidUrl = IsUrlValid(liveUrl);
+                    }
+                    catch (Exception ex)
+                    {
+                        if (ex is KustoClientException || ex is KustoServiceException)
+                        {
+                            // Finish up with the data we have and then exit.
+                            break;
+                        }
+
+                        throw;
+                    }
+
+                    if (isValidUrl)
+                    {
+                        // It's a valid URL with no recent page views.
+                        noClickRedirects.Add(redirect);
+                    }
+                    else
+                    {
+                        // Invalid URL, so don't delete redirect entry
+                        // in case we constructed the URL incorrectly.
+                        clicks = -1;
+                    }
+                }
+
+                sb.AppendLine($"{sourcePathUrl}\t{clicks}");
+
+                if (i % 25 == 0)
+                {
+                    Console.WriteLine($"Progress update: Checked {i} of {redirectFile.redirections.Count} redirects.");
                 }
             }
 
@@ -1457,34 +1514,63 @@ namespace CleanRepo
 
             long NumberOfClicks(string url)
             {
-                long numClicks = -1;
-
                 string query = @"PageView | where Site == ""docs.microsoft.com"" | where StartDateTime > ago(" + lookbackDays +
-                    @"d) | where Url endswith """ + url + @""" | count";
+                    @"d) | where Url endswith """ + url + @""" | summarize PageViews=dcount(PageViewId) by ContentId";
 
                 IDataReader reader = null;
                 try
                 {
                     reader = client.ExecuteQuery(query);
                 }
-                catch (Kusto.Cloud.Platform.Data.DataTableIncompleteDataStreamException)
+                catch (DataTableIncompleteDataStreamException)
                 {
                     // Just ignore this redirect for now.
                     Console.WriteLine("Caught DataTableIncompleteDataStreamException. Will continue on with the next redirect.");
+                    return -1;
                 }
 
-                if (reader != null && reader.FieldCount == 1)
+                long numClicks = 0;
+
+                if (reader != null && reader.FieldCount == 2)
                 {
-                    while (reader.Read())
+                    if (reader.Read())
                     {
-                        numClicks = reader.GetInt64(reader.GetOrdinal("Count"));
+                        numClicks = reader.GetInt64(reader.GetOrdinal("PageViews"));
                     }
 
-                    // Call Close when done reading.
                     reader.Close();
                 }
 
                 return numClicks;
+            }
+
+            bool IsUrlValid(string LiveUrl)
+            {
+                string query = @"TopicMetadata | where LiveUrl == """ + LiveUrl + @""" | distinct ContentId";
+
+                IDataReader reader = null;
+                try
+                {
+                    reader = client.ExecuteQuery(query);
+                }
+                catch (DataTableIncompleteDataStreamException)
+                {
+                    // Could still be valid, but return false just in case.
+                    return false;
+                }
+
+                bool isValid = false;
+                if (reader != null && reader.FieldCount == 1)
+                {
+                    if (reader.Read())
+                    {
+                        isValid = true;
+                    }
+
+                    reader.Close();
+                }
+
+                return isValid;
             }
         }
 
