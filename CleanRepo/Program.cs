@@ -9,6 +9,7 @@ using System.Data;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Security;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -24,7 +25,8 @@ namespace CleanRepo
         static void Main(string[] args)
         {
 #if DEBUG
-            args = new[] { "--trim-redirects","--docset-name=dotnet", "--docset-root=c:\\users\\gewarren\\dotnet-docs\\docs", "--lookback-days=90", "--output-file=c:\\users\\gewarren\\desktop\\clicks.txt" };
+            //args = new[] { "--trim-redirects", "--docset-root=c:\\users\\gewarren\\dotnet-docs\\docs", "--lookback-days=90", "--output-file=c:\\users\\gewarren\\desktop\\clicks.txt" };
+            args = new[] { "--relative-links" };
 #endif
 
             Parser.Default.ParseArguments<Options>(args).WithParsed(RunOptions);
@@ -38,65 +40,87 @@ namespace CleanRepo
             // Find orphaned topics
             if (options.FindOrphanedTopics)
             {
+                if (String.IsNullOrEmpty(options.InputDirectory))
+                {
+                    Console.WriteLine("\nEnter the path to the directory that you want to check for orphans:\n");
+                    options.InputDirectory = Console.ReadLine();
+                }
                 if (String.IsNullOrEmpty(options.InputDirectory) || !Directory.Exists(options.InputDirectory))
                 {
-                    Console.WriteLine("\nYou must specify a valid top-level directory in which to perform the clean up, e.g. c:\\repos\\dotnet-docs\\docs.");
+                    Console.WriteLine("\nThat directory doesn't exist.");
                     return;
+                }
+
+                if (options.Delete is null)
+                {
+                    options.Delete = false;
+                    Console.WriteLine("\nDo you want to delete orphans (y or n)?\n");
+                    var info = Console.ReadKey();
+                    if (info.KeyChar == 'y' && info.KeyChar == 'Y')
+                    {
+                        options.Delete = true;
+                    }
                 }
 
                 Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory and its subdirectories for orphaned topics...");
 
                 List<FileInfo> tocFiles = GetTocFiles(options.InputDirectory);
-                List<FileInfo> markdownFiles = GetMarkdownFiles(options.InputDirectory, options.SearchRecursively);
+                List<FileInfo> markdownFiles = GetMarkdownFiles(options.InputDirectory);
 
                 if (tocFiles is null || markdownFiles is null)
                 {
                     return;
                 }
 
-                ListOrphanedTopics(tocFiles, markdownFiles, options.Delete);
-            }
-            // Find topics referenced multiple times
-            else if (options.FindMultiples)
-            {
-                if (String.IsNullOrEmpty(options.InputDirectory) || !Directory.Exists(options.InputDirectory))
-                {
-                    Console.WriteLine("\nYou must specify a valid top-level directory in which to perform the clean up, e.g. c:\\repos\\dotnet-docs\\docs.");
-                    return;
-                }
-
-                Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory and its subdirectories for " +
-                    $"topics that appear more than once in one or more TOC files...\n");
-
-                List<FileInfo> tocFiles = GetTocFiles(options.InputDirectory);
-                List<FileInfo> markdownFiles = GetMarkdownFiles(options.InputDirectory, options.SearchRecursively);
-
-                if (tocFiles is null || markdownFiles is null)
-                {
-                    return;
-                }
-
-                ListPopularFiles(tocFiles, markdownFiles);
+                ListOrphanedTopics(tocFiles, markdownFiles, options.Delete.Value);
             }
             // Find orphaned images
             else if (options.FindOrphanedImages)
             {
+                // Get input directory.
+                if (String.IsNullOrEmpty(options.InputDirectory))
+                {
+                    Console.WriteLine("\nEnter the path to the directory that you want to check for orphans:\n");
+                    options.InputDirectory = Console.ReadLine();
+                }
                 if (String.IsNullOrEmpty(options.InputDirectory) || !Directory.Exists(options.InputDirectory))
                 {
-                    Console.WriteLine("\nYou must specify a valid top-level directory in which to perform the clean up, e.g. c:\\repos\\dotnet-docs\\docs.");
+                    Console.WriteLine("\nThat directory doesn't exist.");
                     return;
                 }
 
-                if (String.IsNullOrEmpty(options.DocsetName))
+                // Check that this directory or one of its ancestors has a docfx.json file.
+                // I.e. we don't want it to be a parent directory of a docfx.json directory, so single docset only.
+                var directory = new DirectoryInfo(options.InputDirectory);
+                DirectoryInfo docfxDir = GetDocFxDirectory(directory);
+                if (docfxDir == null)
                 {
-                    Console.WriteLine("\nYou must specify a docset name, e.g. dotnet.");
+                    Console.WriteLine("\nCould not find the docfx.json file for this directory.");
                     return;
                 }
 
-                string recursive = options.SearchRecursively ? "recursively " : "";
-                Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory {recursive}for orphaned .png/.jpg/.gif/.svg files...\n");
+                // Get the base path URL for the docset.
+                string basePathUrl = GetUrlBasePath(Path.Combine(docfxDir.FullName, "docfx.json"));
+                if (basePathUrl == null)
+                {
+                    Console.WriteLine("\nCould not find the base path URL for this directory.");
+                    return;
+                }
 
-                Dictionary<string, int> imageFiles = GetMediaFiles(options.InputDirectory, options.SearchRecursively);
+                if (options.Delete is null)
+                {
+                    options.Delete = false;
+                    Console.WriteLine("\nDo you want to delete orphans (y or n)?\n");
+                    var info = Console.ReadKey();
+                    if (info.KeyChar == 'y' && info.KeyChar == 'Y')
+                    {
+                        options.Delete = true;
+                    }
+                }
+
+                Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory recursively for orphaned .png/.jpg/.gif/.svg files...\n");
+
+                Dictionary<string, int> imageFiles = GetMediaFiles(options.InputDirectory);
 
                 if (imageFiles.Count == 0)
                 {
@@ -104,22 +128,37 @@ namespace CleanRepo
                     return;
                 }
 
-                ListOrphanedImages(options.InputDirectory, imageFiles, options.DocsetName, options.Delete);
+                ListOrphanedImages(options.InputDirectory, imageFiles, basePathUrl, options.Delete.Value);
             }
             // Find orphaned include-type files
             else if (options.FindOrphanedIncludes)
             {
+                if (String.IsNullOrEmpty(options.InputDirectory))
+                {
+                    Console.WriteLine("\nEnter the path to the directory that you want to check for orphans:\n");
+                    options.InputDirectory = Console.ReadLine();
+                }
                 if (String.IsNullOrEmpty(options.InputDirectory) || !Directory.Exists(options.InputDirectory))
                 {
-                    Console.WriteLine("\nYou must specify a valid top-level directory in which to perform the clean up, e.g. c:\\repos\\dotnet-docs\\docs.");
+                    Console.WriteLine("\nThat directory doesn't exist.");
                     return;
                 }
 
-                string recursive = options.SearchRecursively ? "recursively " : "";
-                Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory {recursive}for orphaned .md files " +
+                if (options.Delete is null)
+                {
+                    options.Delete = false;
+                    Console.WriteLine("\nDo you want to delete orphans (y or n)?\n");
+                    var info = Console.ReadKey();
+                    if (info.KeyChar == 'y' && info.KeyChar == 'Y')
+                    {
+                        options.Delete = true;
+                    }
+                }
+
+                Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory recursively for orphaned .md files " +
                     $"in directories named 'includes' or '_shared'.");
 
-                Dictionary<string, int> includeFiles = GetIncludeFiles(options.InputDirectory, options.SearchRecursively);
+                Dictionary<string, int> includeFiles = GetIncludeFiles(options.InputDirectory);
 
                 if (includeFiles.Count == 0)
                 {
@@ -127,21 +166,36 @@ namespace CleanRepo
                     return;
                 }
 
-                ListOrphanedIncludes(options.InputDirectory, includeFiles, options.Delete);
+                ListOrphanedIncludes(options.InputDirectory, includeFiles, options.Delete.Value);
             }
             // Find orphaned .cs and .vb files
             else if (options.FindOrphanedSnippets)
             {
+                if (String.IsNullOrEmpty(options.InputDirectory))
+                {
+                    Console.WriteLine("\nEnter the path to the directory that you want to check for orphans:\n");
+                    options.InputDirectory = Console.ReadLine();
+                }
                 if (String.IsNullOrEmpty(options.InputDirectory) || !Directory.Exists(options.InputDirectory))
                 {
-                    Console.WriteLine("\nYou must specify a valid top-level directory in which to perform the clean up, e.g. c:\\repos\\dotnet-docs\\docs.");
+                    Console.WriteLine("\nThat directory doesn't exist.");
                     return;
                 }
 
-                string recursive = options.SearchRecursively ? "recursively " : "";
-                Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory {recursive}for orphaned .cs and .vb files.");
+                if (options.Delete is null)
+                {
+                    options.Delete = false;
+                    Console.WriteLine("\nDo you want to delete orphans (y or n)?\n");
+                    var info = Console.ReadKey();
+                    if (info.KeyChar == 'y' && info.KeyChar == 'Y')
+                    {
+                        options.Delete = true;
+                    }
+                }
 
-                List<string> snippetFiles = GetSnippetFiles(options.InputDirectory, options.SearchRecursively);
+                Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory recursively for orphaned .cs and .vb files.");
+
+                List<string> snippetFiles = GetSnippetFiles(options.InputDirectory);
 
                 if (snippetFiles.Count == 0)
                 {
@@ -149,150 +203,131 @@ namespace CleanRepo
                     return;
                 }
 
-                ListOrphanedSnippets(options.InputDirectory, snippetFiles, options.Delete);
-            }
-            // Remove hops in master redirection file.
-            else if (options.RemoveRedirectHops)
-            {
-                if (String.IsNullOrEmpty(options.DocsetName))
-                {
-                    Console.WriteLine("\nYou must specify a docset name, e.g. dotnet.");
-                    return;
-                }
-                if (String.IsNullOrEmpty(options.DocsetRoot) || !Directory.Exists(options.DocsetRoot))
-                {
-                    Console.WriteLine("\nYou must specify a valid docset root for this repo when cleaning the redirection file.");
-                    return;
-                }
-
-                FileInfo redirectsFile = null;
-                if (String.IsNullOrEmpty(options.RedirectsFile))
-                {
-                    // Find the .openpublishing.redirection.json file for the directory
-                    redirectsFile = GetRedirectsFile(options.DocsetRoot);
-                }
-                else
-                {
-                    redirectsFile = new FileInfo(options.RedirectsFile);
-                }
-
-                if (redirectsFile == null)
-                {
-                    Console.WriteLine($"\nCould not find redirection file for directory '{options.DocsetRoot}'.");
-                    return;
-                }
-
-                DirectoryInfo dirInfo = new DirectoryInfo(options.DocsetRoot);
-                string docsetRootFolder = dirInfo.Name;
-
-                Console.WriteLine($"\nCleaning the '{redirectsFile.FullName}' redirection file.\n");
-                RemoveRedirectHops(redirectsFile, options.DocsetName, docsetRootFolder);
+                ListOrphanedSnippets(options.InputDirectory, snippetFiles, options.Delete.Value);
             }
             // Format master redirection file.
             else if (options.FormatRedirectsFile)
             {
-                if (String.IsNullOrEmpty(options.DocsetRoot) || !Directory.Exists(options.DocsetRoot))
+                // Obtain master redirection file.
+                if (String.IsNullOrEmpty(options.RepoRoot))
                 {
-                    Console.WriteLine("\nYou must specify a valid docset root for this repo when trimming the redirection file.");
+                    Console.WriteLine("\nEnter the path to the root of the repository on your computer:");
+                    options.RepoRoot = Console.ReadLine();
+                }
+                if (String.IsNullOrEmpty(options.RepoRoot) || !Directory.Exists(options.RepoRoot))
+                {
+                    Console.WriteLine("\nThat directory doesn't exist.");
                     return;
                 }
-
-                FileInfo redirectsFile;
-                if (String.IsNullOrEmpty(options.RedirectsFile))
-                {
-                    // Find the .openpublishing.redirection.json file for the directory
-                    redirectsFile = GetRedirectsFile(options.DocsetRoot);
-                }
-                else
-                {
-                    redirectsFile = new FileInfo(options.RedirectsFile);
-                }
-
+                FileInfo redirectsFile = GetFile(options.RepoRoot, ".openpublishing.redirection.json");
                 if (redirectsFile == null)
                 {
-                    Console.WriteLine($"\nCould not find redirection file for directory '{options.DocsetRoot}'.");
+                    Console.WriteLine($"\nCouldn't find redirection file for directory '{options.RepoRoot}'.");
                     return;
                 }
 
-                DirectoryInfo dirInfo = new DirectoryInfo(options.DocsetRoot);
-                string docsetRootFolder = dirInfo.Name;
-
-                Console.WriteLine($"\nFormatting the '{redirectsFile.FullName}' file.\n");
+                Console.WriteLine($"\nFormatting the '{redirectsFile.FullName}' file.");
                 FormatRedirectionFile(redirectsFile);
             }
             // Trim master redirection file.
             else if (options.TrimRedirectsFile)
             {
+                // Number of page view history days.
                 int days = options.LinkActivityDays;
 
-                if (String.IsNullOrEmpty(options.DocsetName))
+                // Obtain master redirection file.
+                if (String.IsNullOrEmpty(options.RepoRoot))
                 {
-                    Console.WriteLine("\nYou must specify a docset name, for example, 'dotnet' or 'azure'.");
+                    Console.WriteLine("\nEnter the path to the root of the repository on your computer:");
+                    options.RepoRoot = Console.ReadLine();
+                }
+                if (String.IsNullOrEmpty(options.RepoRoot) || !Directory.Exists(options.RepoRoot))
+                {
+                    Console.WriteLine("\nThat directory doesn't exist.");
                     return;
                 }
-                if (String.IsNullOrEmpty(options.DocsetRoot) || !Directory.Exists(options.DocsetRoot))
-                {
-                    Console.WriteLine("\nYou must specify a valid docset root for this repo when trimming the redirection file.");
-                    return;
-                }
-                if (String.IsNullOrEmpty(options.OutputFilePath))
-                {
-                    Console.WriteLine("\nYou must specify an output file to record link-click activity.");
-                    return;
-                }
-
-                FileInfo redirectsFile;
-                if (String.IsNullOrEmpty(options.RedirectsFile))
-                {
-                    // Find the .openpublishing.redirection.json file for the directory
-                    redirectsFile = GetRedirectsFile(options.DocsetRoot);
-                }
-                else
-                {
-                    redirectsFile = new FileInfo(options.RedirectsFile);
-                }
-
+                FileInfo redirectsFile = GetFile(options.RepoRoot, ".openpublishing.redirection.json");
                 if (redirectsFile == null)
                 {
-                    Console.WriteLine($"\nCould not find redirection file for directory '{options.DocsetRoot}'.");
+                    Console.WriteLine($"\nCouldn't find redirection file for directory '{options.RepoRoot}'.");
                     return;
                 }
 
-                DirectoryInfo dirInfo = new DirectoryInfo(options.DocsetRoot);
-                string docsetRootFolder = dirInfo.Name;
+                // Find the docset(s) and its URL base path.
+                FileInfo opsConfigFile = GetFile(options.RepoRoot, ".openpublishing.publish.config.json");
+                if (opsConfigFile == null)
+                {
+                    Console.WriteLine($"\nCouldn't find OPS config file for directory '{options.RepoRoot}'.");
+                    return;
+                }
+                Dictionary<string, string> docsets = GetDocsetInfo(opsConfigFile);
+
+                // Page view output.
+                if (String.IsNullOrEmpty(options.OutputFilePath))
+                {
+                    Console.WriteLine("\nEnter the name (and path) of a file to write the page view data to:");
+                    options.OutputFilePath = Console.ReadLine();
+
+                    // Check that the file is accessible so it actually works when we need it.
+                    FileInfo outputFile = new FileInfo(options.OutputFilePath);
+                    if (!File.Exists(outputFile.FullName))
+                    {
+                        try
+                        {
+                            outputFile.Create();
+                        }
+                        catch (Exception ex)
+                        {
+                            if (ex is SecurityException || ex is UnauthorizedAccessException)
+                            {
+                                Console.WriteLine($"Unable to create a file in {outputFile.DirectoryName}. Enter an accessible location.");
+                                return;
+                            }
+
+                            throw;
+                        }
+                    }
+                }
 
                 Console.WriteLine($"\nTrimming links in the '{redirectsFile.FullName}' file that haven't been clicked in the last {days} days.\n");
-                TrimRedirectEntries(redirectsFile, options.DocsetName, days, options.OutputFilePath);
+                TrimRedirectEntries(redirectsFile, docsets, days, options.OutputFilePath);
             }
             // Replace links to topics that are redirected in the master redirection file
             else if (options.ReplaceRedirectTargets)
             {
+                // Get the directory in which to replace links.
+                if (String.IsNullOrEmpty(options.InputDirectory))
+                {
+                    Console.WriteLine("\nEnter the path to the directory that you want to replace links in:\n");
+                    options.InputDirectory = Console.ReadLine();
+                }
                 if (String.IsNullOrEmpty(options.InputDirectory) || !Directory.Exists(options.InputDirectory))
                 {
-                    Console.WriteLine("\nYou must specify a valid top-level directory in which to perform the clean up, e.g. c:\\repos\\dotnet-docs\\docs.");
+                    Console.WriteLine("\nThat directory doesn't exist.");
                     return;
                 }
 
-                Console.WriteLine("\nIt's highly recommended to run the --remove-hops option before replacing redirect links. Do you want to continue? y or n");
-                var info = Console.ReadKey();
-                if (info.KeyChar != 'y' && info.KeyChar != 'Y')
+                // Check that this directory or one of its ancestors has a docfx.json file.
+                // I.e. we don't want it to be a parent directory of a docfx.json directory, so single docset only.
+                var directory = new DirectoryInfo(options.InputDirectory);
+                DirectoryInfo docfxDir = GetDocFxDirectory(directory);
+                if (docfxDir == null)
                 {
+                    Console.WriteLine("\nCould not find the docfx.json file for this directory.");
+                    return;
+                }
+
+                // Get the base path URL for the docset.
+                string urlBasePath = GetUrlBasePath(Path.Combine(docfxDir.FullName, "docfx.json"));
+                if (urlBasePath == null)
+                {
+                    Console.WriteLine("\nCould not find the base path URL for this directory.");
                     return;
                 }
 
                 Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory for links to redirected topics...\n");
 
-                FileInfo redirectsFile;
-                if (String.IsNullOrEmpty(options.RedirectsFile))
-                {
-                    // Find the .openpublishing.redirection.json file for the directory
-                    redirectsFile = GetRedirectsFile(options.InputDirectory);
-                }
-                else
-                {
-                    redirectsFile = new FileInfo(options.RedirectsFile);
-                }
-
+                FileInfo redirectsFile = GetFile(options.InputDirectory, ".openpublishing.redirection.json");
                 if (redirectsFile == null)
                 {
                     Console.WriteLine($"\nCould not find redirects file for directory '{options.InputDirectory}'.");
@@ -303,48 +338,88 @@ namespace CleanRepo
                 IList<Redirect> redirects = GetAllRedirectedFiles(redirectsFile);
                 if (redirects is null)
                 {
-                    Console.WriteLine("\nDid not find any redirects - exiting.");
+                    Console.WriteLine("\nDid not find any redirects in the file.");
                     return;
                 }
 
                 // Get all the markdown and YAML files.
-                List<FileInfo> linkingFiles = GetMarkdownFiles(options.InputDirectory, options.SearchRecursively);
-                linkingFiles.AddRange(GetYAMLFiles(options.InputDirectory, options.SearchRecursively));
+                List<FileInfo> linkingFiles = GetMarkdownFiles(options.InputDirectory);
+                linkingFiles.AddRange(GetYAMLFiles(options.InputDirectory));
 
                 // Check all links, including in toc.yml, to files in the redirects list.
                 // Replace links to redirected files.
-                ReplaceRedirectedLinks(redirects, linkingFiles, options.DocsetName);
+                ReplaceRedirectedLinks(redirects, linkingFiles, urlBasePath);
 
-                Console.WriteLine("DONE");
+                Console.WriteLine("\nFinished replacing links.");
             }
             // Replace site-relative links to *this* repo with file-relative links.
             else if (options.ReplaceWithRelativeLinks)
             {
+                if (String.IsNullOrEmpty(options.InputDirectory))
+                {
+                    Console.WriteLine("\nEnter the path to the directory where you want to replace redirected links:\n");
+                    options.InputDirectory = Console.ReadLine();
+                }
                 if (String.IsNullOrEmpty(options.InputDirectory) || !Directory.Exists(options.InputDirectory))
                 {
-                    Console.WriteLine("\nYou must specify a valid top-level directory in which to perform the clean up, e.g. c:\\repos\\dotnet-docs\\docs.");
-                    return;
-                }
-                if (String.IsNullOrEmpty(options.DocsetName))
-                {
-                    Console.WriteLine("\nYou must specify the docset name for this repo when replacing site-relative links.");
-                    return;
-                }
-                if (String.IsNullOrEmpty(options.DocsetRoot) || !Directory.Exists(options.DocsetRoot))
-                {
-                    Console.WriteLine("\nYou must specify a valid docset root for this repo when replacing site-relative links.");
+                    Console.WriteLine("\nThat directory doesn't exist.");
                     return;
                 }
 
-                Console.WriteLine($"\nReplacing site-relative links to '/{options.DocsetName}/' in " +
+                // Get the OPS config file.
+                FileInfo opsConfigFile = GetFile(options.InputDirectory, ".openpublishing.publish.config.json");
+                if (opsConfigFile == null)
+                {
+                    Console.WriteLine($"\nCouldn't find OPS config file for directory '{options.InputDirectory}'.");
+                    return;
+                }
+
+                // Check that this isn't the root directory of the repo. The code doesn't handle that case currently
+                // because it can't always determine the base path of the docset (e.g. for dotnet/docs repo).
+                if (String.Equals(opsConfigFile.DirectoryName, options.InputDirectory, StringComparison.OrdinalIgnoreCase))
+                {
+                    Console.WriteLine($"\nYou entered the repo root directory. Please enter a subdirectory in which to replace links.");
+                    return;
+                }
+
+                // Check that this directory or one of its ancestors has a docfx.json file.
+                // I.e. we don't want it to be a parent directory of a docfx.json directory, so single docset only.
+                var directory = new DirectoryInfo(options.InputDirectory);
+                DirectoryInfo docfxDir = GetDocFxDirectory(directory);
+                if (docfxDir == null)
+                {
+                    Console.WriteLine("\nCould not find the docfx.json file for this directory.");
+                    return;
+                }
+
+                // Get the absolute path to the base directory for this docset.
+                string rootDirectory = GetDocsetAbsolutePath(docfxDir.FullName, directory);
+
+                // Find the docset and its URL base path.
+                // Get all docsets for the OPS config file.
+                Dictionary<string, string> docsets = GetDocsetInfo(opsConfigFile);
+                // Find the specific docset info for the input directory.
+                string relativePathToDocset = Path.GetRelativePath(opsConfigFile.DirectoryName, rootDirectory);
+                string urlBasePath = null;
+                foreach (var docset in docsets)
+                {
+                    if (docset.Key == relativePathToDocset)
+                    {
+                        // Bingo!
+                        urlBasePath = docset.Value;
+                        break;
+                    }
+                }
+
+                Console.WriteLine($"\nReplacing site-relative links to '{urlBasePath}/' in " +
                     $"the '{options.InputDirectory}' directory with file-relative links.\n");
 
                 // Get all the markdown and YAML files.
-                List<FileInfo> linkingFiles = GetMarkdownFiles(options.InputDirectory, options.SearchRecursively);
-                linkingFiles.AddRange(GetYAMLFiles(options.InputDirectory, options.SearchRecursively));
+                List<FileInfo> linkingFiles = GetMarkdownFiles(options.InputDirectory);
+                linkingFiles.AddRange(GetYAMLFiles(options.InputDirectory));
 
                 // Check all links in these files.
-                ReplaceLinks(linkingFiles, options.DocsetName, options.DocsetRoot);
+                ReplaceLinks(linkingFiles, urlBasePath, rootDirectory);
             }
             // Nothing to do.
             else
@@ -358,8 +433,11 @@ namespace CleanRepo
         }
 
         #region Replace site-relative links
-        private static void ReplaceLinks(List<FileInfo> linkingFiles, string docsetName, string rootDirectory)
+        private static void ReplaceLinks(List<FileInfo> linkingFiles, string urlBasePath, string rootDirectory)
         {
+            // Strip preceding / off urlBasePath, if it exists.
+            urlBasePath = urlBasePath.TrimStart('/');
+
             foreach (var linkingFile in linkingFiles)
             {
                 // Read the whole file up front because we might change the file mid-flight.
@@ -371,7 +449,7 @@ namespace CleanRepo
                 // For more information, see [this page](/test-repo/debugger/dbg-tips).
 
                 // Find links that look like [link text](/docsetName/some other text)
-                string pattern1 = @"\]\((/" + docsetName + @"/([^\)\s]*))";
+                string pattern1 = @"\]\((/" + urlBasePath + @"/([^\)\s]*))";
 
                 foreach (Match match in Regex.Matches(originalFileText, pattern1, RegexOptions.IgnoreCase))
                 {
@@ -383,56 +461,56 @@ namespace CleanRepo
                     if (siteRelativePath.IndexOf('?') >= 0)
                         continue;
 
-                    ReplaceLinkText(siteRelativePath, rootDirectory, linkingFile.FullName, match.Groups[0].Value, match.Groups[1].Value);
+                    ReplaceLinkText(siteRelativePath, rootDirectory, linkingFile, match.Groups[0].Value, match.Groups[1].Value);
                 }
 
                 // Find links that look like <img src="/azure/mydocs/media/pic3.png">
-                string pattern2 = "<img[^>]*?src[ ]*=[ ]*\"(/" + docsetName + "/([^>]*?.(png|gif|jpg|svg)))[ ]*\"";
+                string pattern2 = "<img[^>]*?src[ ]*=[ ]*\"(/" + urlBasePath + "/([^>]*?.(png|gif|jpg|svg)))[ ]*\"";
 
                 foreach (Match match in Regex.Matches(originalFileText, pattern2, RegexOptions.IgnoreCase))
                 {
                     // Get the first capture group, which is the part of the path after the docset name.
                     string siteRelativePath = match.Groups[2].Value;
 
-                    ReplaceLinkText(siteRelativePath, rootDirectory, linkingFile.FullName, match.Groups[0].Value, match.Groups[1].Value);
+                    ReplaceLinkText(siteRelativePath, rootDirectory, linkingFile, match.Groups[0].Value, match.Groups[1].Value);
                 }
 
                 // Find links that look like [0]: /azure/mydocs/media/pic1.png
-                string pattern3 = @"\[.*\]:[ ]*(/" + docsetName + @"/(.*\.(png|gif|jpg|svg)))";
+                string pattern3 = @"\[.*\]:[ ]*(/" + urlBasePath + @"/(.*\.(png|gif|jpg|svg)))";
 
                 foreach (Match match in Regex.Matches(originalFileText, pattern3, RegexOptions.IgnoreCase))
                 {
                     // Get the first capture group, which is the part of the path after the docset name.
                     string siteRelativePath = match.Groups[2].Value;
 
-                    ReplaceLinkText(siteRelativePath, rootDirectory, linkingFile.FullName, match.Groups[0].Value, match.Groups[1].Value);
+                    ReplaceLinkText(siteRelativePath, rootDirectory, linkingFile, match.Groups[0].Value, match.Groups[1].Value);
                 }
 
                 // Find links that look like imageSrc: /azure/mydocs/media/pic1.png
-                string pattern4 = @"imageSrc:[ ]*(/" + docsetName + @"/([^:]*\.(png|gif|jpg|svg)))";
+                string pattern4 = @"imageSrc:[ ]*(/" + urlBasePath + @"/([^:]*\.(png|gif|jpg|svg)))";
 
                 foreach (Match match in Regex.Matches(originalFileText, pattern4, RegexOptions.IgnoreCase))
                 {
                     // Get the first capture group, which is the part of the path after the docset name.
                     string siteRelativePath = match.Groups[2].Value;
 
-                    ReplaceLinkText(siteRelativePath, rootDirectory, linkingFile.FullName, match.Groups[0].Value, match.Groups[1].Value);
+                    ReplaceLinkText(siteRelativePath, rootDirectory, linkingFile, match.Groups[0].Value, match.Groups[1].Value);
                 }
 
                 // Find links that look like :::image type="complex" source="/azure/mydocs/media/pic1.png" alt-text="Screenshot.":::
-                string pattern5 = @":::image[^:]*source=""(/" + docsetName + @"/([^:]*\.(png|gif|jpg|svg)))""[^:]*:::";
+                string pattern5 = @":::image[^:]*source=""(/" + urlBasePath + @"/([^:]*\.(png|gif|jpg|svg)))""[^:]*:::";
 
                 foreach (Match match in Regex.Matches(originalFileText, pattern5, RegexOptions.IgnoreCase))
                 {
                     // Get the first capture group, which is the part of the path after the docset name.
                     string siteRelativePath = match.Groups[2].Value;
 
-                    ReplaceLinkText(siteRelativePath, rootDirectory, linkingFile.FullName, match.Groups[0].Value, match.Groups[1].Value);
+                    ReplaceLinkText(siteRelativePath, rootDirectory, linkingFile, match.Groups[0].Value, match.Groups[1].Value);
                 }
             }
         }
 
-        private static void ReplaceLinkText(string siteRelativePath, string rootDirectory, string linkingFileName, string originalMatch, string originalLink)
+        private static void ReplaceLinkText(string siteRelativePath, string rootDirectory, FileInfo linkingFile, string originalMatch, string originalLink)
         {
             // If the link contains a bookmark, trim it off and add it back later.
             // If there are two hash characters, this pattern is greedy and finds the last one.
@@ -481,20 +559,13 @@ namespace CleanRepo
             // Check that the link is valid in the local repo.
             if (!File.Exists(absolutePath))
             {
-                // Assume this is for an index file that was left off the URL.
-                absolutePath = Path.Combine(absolutePath, "index.md");
-
-                // If it's still not a valid file, bow out.
-                if (!File.Exists(absolutePath))
-                {
-                    return;
-                }
+                return;
             }
 
             if (absolutePath != null)
             {
                 // Determine the file-relative path to absolutePath.
-                string fileRelativePath = GetFileRelativePath(linkingFileName, absolutePath);
+                string fileRelativePath = Path.GetRelativePath(linkingFile.DirectoryName, absolutePath);
 
                 if (fileRelativePath != null)
                 {
@@ -507,62 +578,14 @@ namespace CleanRepo
                     string newText = originalMatch.Replace(originalLink, fileRelativePath);
 
                     // Replace the link.
-                    Console.WriteLine($"Replacing '{originalMatch}' with '{newText}' in file '{linkingFileName}'.");
+                    Console.WriteLine($"Replacing '{originalMatch}' with '{newText}' in file '{linkingFile.FullName}'.");
 
                     // If a previous link was found and replaced, the text may have changed, so reread the file.
-                    string currentFileText = File.ReadAllText(linkingFileName);
+                    string currentFileText = File.ReadAllText(linkingFile.FullName);
 
-                    File.WriteAllText(linkingFileName, currentFileText.Replace(originalMatch, newText));
+                    File.WriteAllText(linkingFile.FullName, currentFileText.Replace(originalMatch, newText));
                 }
             }
-        }
-
-        private static string GetFileRelativePath(string linkingFilePath, string linkedFilePath)
-        {
-            string[] linkingFileDirs = linkingFilePath.Split('\\');
-            string[] linkedFileDirs = linkedFilePath.Split('\\');
-
-            // Get the shortest of the two paths.
-            int len = linkingFileDirs.Length < linkedFileDirs.Length ? linkingFileDirs.Length : linkedFileDirs.Length;
-
-            // Variables used to determine where in the loop we exit.
-            int lastCommonRoot = -1;
-            int index;
-
-            // Find common root of the two file paths.
-            for (index = 0; index < len; index++)
-            {
-                if (linkingFileDirs[index] == linkedFileDirs[index])
-                    lastCommonRoot = index;
-                else break;
-            }
-
-            // If we didn't find a common prefix, return null.
-            if (lastCommonRoot == -1)
-            {
-                return null;
-            }
-
-            // Build up the relative path.
-            StringBuilder relativePath = new StringBuilder();
-
-            // Add on the ..\
-            for (index = lastCommonRoot + 1; index < linkingFileDirs.Length - 1; index++)
-            {
-                if (linkingFileDirs[index].Length > 0)
-                    relativePath.Append("../");
-            }
-
-            // Add on the folders.
-            for (index = lastCommonRoot + 1; index < linkedFileDirs.Length - 1; index++)
-            {
-                relativePath.Append(linkedFileDirs[index] + "/");
-            }
-
-            // Add the file name.
-            relativePath.Append(linkedFileDirs[linkedFileDirs.Length - 1]);
-
-            return relativePath.ToString();
         }
         #endregion
 
@@ -678,16 +701,13 @@ namespace CleanRepo
         /// if the directory name is 'includes' or '_shared'.
         /// </summary>
         /// <returns></returns>
-        private static Dictionary<string, int> GetIncludeFiles(string inputDirectory, bool searchRecursively)
+        private static Dictionary<string, int> GetIncludeFiles(string inputDirectory)
         {
             DirectoryInfo dir = new DirectoryInfo(inputDirectory);
 
-            SearchOption searchOption = searchRecursively ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
-
             Dictionary<string, int> includeFiles = new Dictionary<string, int>();
 
-            if (String.Compare(dir.Name, "includes", true) == 0
-                || String.Compare(dir.Name, "_shared", true) == 0)
+            if (String.Compare(dir.Name, "includes", true) == 0 || String.Compare(dir.Name, "_shared", true) == 0)
             {
                 // This is a folder that is likely to contain "include"-type files, i.e. files that aren't in the TOC.
 
@@ -697,19 +717,16 @@ namespace CleanRepo
                 }
             }
 
-            if (searchOption == SearchOption.AllDirectories)
+            // Search in subdirectories.
+            foreach (var subDirectory in dir.EnumerateDirectories("*", SearchOption.AllDirectories))
             {
-                foreach (var subDirectory in dir.EnumerateDirectories("*", SearchOption.AllDirectories))
+                if (String.Compare(subDirectory.Name, "includes", true) == 0 || String.Compare(subDirectory.Name, "_shared", true) == 0)
                 {
-                    if (String.Compare(subDirectory.Name, "includes", true) == 0
-                        || String.Compare(subDirectory.Name, "_shared", true) == 0)
-                    {
-                        // This is a folder that is likely to contain "include"-type files, i.e. files that aren't in the TOC.
+                    // This is a folder that is likely to contain "include"-type files, i.e. files that aren't in the TOC.
 
-                        foreach (var file in subDirectory.EnumerateFiles("*.md"))
-                        {
-                            includeFiles.Add(file.FullName.ToLower(), 0);
-                        }
+                    foreach (var file in subDirectory.EnumerateFiles("*.md"))
+                    {
+                        includeFiles.Add(file.FullName.ToLower(), 0);
                     }
                 }
             }
@@ -722,11 +739,9 @@ namespace CleanRepo
         /// <summary>
         /// Returns a list of *.cs and *.vb files in the current directory, and optionally subdirectories.
         /// </summary>
-        private static List<string> GetSnippetFiles(string inputDirectory, bool searchRecursively)
+        private static List<string> GetSnippetFiles(string inputDirectory)
         {
             DirectoryInfo dir = new DirectoryInfo(inputDirectory);
-
-            SearchOption searchOption = searchRecursively ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
 
             List<string> snippetFiles = new List<string>();
 
@@ -739,18 +754,15 @@ namespace CleanRepo
                 snippetFiles.Add(file.FullName.ToLower());
             }
 
-            if (searchOption == SearchOption.AllDirectories)
+            foreach (var subDirectory in dir.EnumerateDirectories("*", SearchOption.AllDirectories))
             {
-                foreach (var subDirectory in dir.EnumerateDirectories("*", SearchOption.AllDirectories))
+                foreach (var file in subDirectory.EnumerateFiles("*.cs"))
                 {
-                    foreach (var file in subDirectory.EnumerateFiles("*.cs"))
-                    {
-                        snippetFiles.Add(file.FullName.ToLower());
-                    }
-                    foreach (var file in subDirectory.EnumerateFiles("*.vb"))
-                    {
-                        snippetFiles.Add(file.FullName.ToLower());
-                    }
+                    snippetFiles.Add(file.FullName.ToLower());
+                }
+                foreach (var file in subDirectory.EnumerateFiles("*.vb"))
+                {
+                    snippetFiles.Add(file.FullName.ToLower());
                 }
             }
 
@@ -1123,7 +1135,7 @@ namespace CleanRepo
         }
         #endregion
 
-        #region Orphaned topics
+        #region Orphaned articles
         /// <summary>
         /// Lists the markdown files that aren't referenced from a TOC file.
         /// </summary>
@@ -1327,31 +1339,7 @@ namespace CleanRepo
             public string source_path { get; set; }
             public string redirect_url { get; set; }
             public bool? redirect_document_id { get; set; }
-        }
-
-        private static FileInfo GetRedirectsFile(string inputDirectory)
-        {
-            DirectoryInfo dir = new DirectoryInfo(inputDirectory);
-
-            try
-            {
-                FileInfo[] files = dir.GetFiles(".openpublishing.redirection.json", SearchOption.TopDirectoryOnly);
-                while (dir.GetFiles(".openpublishing.redirection.json", SearchOption.TopDirectoryOnly).Length == 0)
-                {
-                    dir = dir.Parent;
-
-                    // Loop exit condition.
-                    if (dir == dir.Root)
-                        return null;
-                }
-
-                return dir.GetFiles(".openpublishing.redirection.json", SearchOption.TopDirectoryOnly)[0];
-            }
-            catch (DirectoryNotFoundException)
-            {
-                Console.WriteLine($"Could not find directory {dir.FullName}");
-                throw;
-            }
+            public IList<string> monikers { get; set; }
         }
 
         private static void WriteRedirectJson(string filePath, RedirectFile redirects)
@@ -1402,28 +1390,41 @@ namespace CleanRepo
         /// For each source path in a redirect entry, check if it's been clicked in any locale
         /// in the last X days. If not, remove the redirect entry from the redirection file.
         /// </summary>
-        private static void TrimRedirectEntries(FileInfo redirectsFileInfo, string docsetName, int lookbackDays, string outputFile)
+        private static void TrimRedirectEntries(FileInfo redirectsFileInfo, Dictionary<string, string> docsets, int lookbackDays, string outputFile)
         {
             RedirectFile redirectFile = LoadRedirectJson(redirectsFileInfo);
             if (redirectFile is null)
             {
-                Console.WriteLine("Deserialization failed.");
+                Console.WriteLine("Deserialization of redirection file failed.");
                 return;
             }
-
-            var noClickRedirects = new List<Redirect>();
 
             // Set up Kusto client.
             KustoConnectionStringBuilder builder = new KustoConnectionStringBuilder("https://cgadataout.kusto.windows.net/;Fed=true", "CustomerTouchPoint");
             var client = Kusto.Data.Net.Client.KustoClientFactory.CreateCslQueryProvider(builder);
 
+            // Tracks which redirects to remove.
+            var noClickRedirects = new List<Redirect>();
             // For link-click output.
             var sb = new StringBuilder();
 
             //for (int i = 0; i < redirectFile.redirections.Count && i < 50; i++)
             for (int i = 0; i < redirectFile.redirections.Count; i++)
             {
+                // Output for long-running jobs.
+                if ((i % 50 == 0) && (i > 0))
+                {
+                    Console.WriteLine($"Progress update: Checked {i} of {redirectFile.redirections.Count} redirects.");
+                }
+
                 Redirect redirect = redirectFile.redirections[i];
+
+                // If the redirect has a moniker, we don't know how to construct the URL, so ignore it.
+                // TODO: To query page views on redirects with a moniker, 
+                // probably just add "?view=<moniker>" to the end of the URL.
+                // But what if there are multiple monikers?
+                if (redirect.monikers != null)
+                    continue;
 
                 // Trim off the file extension.
                 string trimmedPath = redirect.source_path[0..redirect.source_path.LastIndexOf('.')];
@@ -1434,11 +1435,27 @@ namespace CleanRepo
                     trimmedPath = trimmedPath[0..(trimmedPath.LastIndexOf('/') + 1)];
                 }
 
-                // Trim off the first part of the path e.g. "docs" or articles".
-                trimmedPath = trimmedPath[(trimmedPath.IndexOf('/') + 1)..];
+                string urlBasePath = null;
+
+                // Trim off the beginning of the path and obtain the corresponding base path for the URL.
+                foreach (var docset in docsets)
+                {
+                    if (trimmedPath.StartsWith(docset.Key))
+                    {
+                        trimmedPath = trimmedPath[(docset.Key.Length + 1)..];
+                        urlBasePath = docset.Value;
+                        break;
+                    }
+                }
+
+                if (String.IsNullOrEmpty(urlBasePath))
+                {
+                    // Ignore this redirect.
+                    continue;
+                }
 
                 // Construct the URL to the article.
-                string sourcePathUrl = $"/{docsetName}/{trimmedPath}";
+                string sourcePathUrl = $"{urlBasePath}/{trimmedPath}";
 
                 long clicks = -1;
                 try
@@ -1491,11 +1508,6 @@ namespace CleanRepo
                 }
 
                 sb.AppendLine($"{sourcePathUrl}\t{clicks}");
-
-                if (i % 25 == 0)
-                {
-                    Console.WriteLine($"Progress update: Checked {i} of {redirectFile.redirections.Count} redirects.");
-                }
             }
 
             // Remove any defunct redirects.
@@ -1578,16 +1590,16 @@ namespace CleanRepo
         /// For each target URL, see if it's a source_path somewhere else.
         /// If so, replace the original target URL with the new target URL.
         /// </summary>
-        private static void RemoveRedirectHops(FileInfo redirectsFile, string docsetName, string docsetRootFolderName)
+        private static void RemoveRedirectHops(FileInfo redirectsFile, string basePathUrl, string docsetRootFolderName)
         {
             RedirectFile redirectFile = LoadRedirectJson(redirectsFile);
-            string fileText = File.ReadAllText(redirectsFile.FullName);
-
             if (redirectFile is null)
             {
-                Console.WriteLine("Deserialization failed.");
+                Console.WriteLine("Deserialization of redirection file failed.");
                 return;
             }
+
+            string fileText = File.ReadAllText(redirectsFile.FullName);
 
             // Load the sources and targets into a dictionary for easier look up.
             Dictionary<string, string> redirectsLookup = new Dictionary<string, string>(redirectFile.redirections.Count);
@@ -1599,16 +1611,17 @@ namespace CleanRepo
             foreach (var redirectPair in redirectsLookup)
             {
                 string currentTarget = redirectPair.Value;
-
-                if (!redirectPair.Value.StartsWith("/" + docsetName + "/"))
+                if (!currentTarget.StartsWith("/" + basePathUrl + "/"))
                 {
                     // Redirect URL is in a different docset/repo, so ignore it.
                     continue;
                 }
 
                 // Put the URL into the same format as source_path
-                string normalizedTargetPath = docsetRootFolderName + redirectPair.Value.Remove(0, docsetName.Length + 1) + ".md";
+                string normalizedTargetPath = docsetRootFolderName + currentTarget.Remove(0, basePathUrl.Length + 1) + ".md";
 
+                // If we enter this loop, the target of a redirect is also the source of one or more redirects.
+                // Keep looping till you find the final target.
                 while (redirectsLookup.ContainsKey(normalizedTargetPath))
                 {
                     // Avoid an infinite loop by checking that this isn't the same key/value pair.
@@ -1620,16 +1633,16 @@ namespace CleanRepo
 
                     currentTarget = redirectsLookup[normalizedTargetPath];
 
-                    if (!currentTarget.StartsWith("/" + docsetName + "/"))
+                    if (!currentTarget.StartsWith("/" + basePathUrl + "/"))
                     {
                         // Redirect URL is in a different docset/repo, so stop looking for further targets.
                         break;
                     }
 
-                    normalizedTargetPath = docsetRootFolderName + currentTarget.Remove(0, docsetName.Length + 1) + ".md";
+                    normalizedTargetPath = docsetRootFolderName + currentTarget.Remove(0, basePathUrl.Length + 1) + ".md";
                 }
 
-                if (currentTarget != redirectPair.Value)
+                if (redirectPair.Value != currentTarget)
                 {
                     Console.WriteLine($"Replacing target URL '{redirectPair.Value}' with '{currentTarget}'.");
 
@@ -1818,6 +1831,223 @@ namespace CleanRepo
 
         #region Generic helper methods
         /// <summary>
+        /// Looks for the specified file in the specified directory, and if not found,
+        /// in all parent directories up to the disk root directory.
+        /// </summary>
+        private static FileInfo GetFile(string inputDirectory, string fileName)
+        {
+            DirectoryInfo dir = new DirectoryInfo(inputDirectory);
+
+            try
+            {
+                FileInfo[] files = dir.GetFiles(fileName, SearchOption.TopDirectoryOnly);
+                while (dir.GetFiles(fileName, SearchOption.TopDirectoryOnly).Length == 0)
+                {
+                    dir = dir.Parent;
+
+                    // Loop exit condition.
+                    if (dir == dir.Root)
+                        return null;
+                }
+
+                return dir.GetFiles(fileName, SearchOption.TopDirectoryOnly)[0];
+            }
+            catch (DirectoryNotFoundException)
+            {
+                Console.WriteLine($"Could not find directory {dir.FullName}");
+                throw;
+            }
+        }
+
+        private static string GetDocsetAbsolutePath(string docfxFilePath, DirectoryInfo inputDirectory)
+        {
+            // Deserialize the docfx.json file.
+            DocFx docfx = LoadDocfxFile(Path.Combine(docfxFilePath, "docfx.json"));
+            if (docfx == null)
+            {
+                return null;
+            }
+
+            string docsetPath = null;
+
+            // If there's more than one docset, choose the one that includes the input directory.
+            foreach (var entry in docfx.build.content)
+            {
+                if (entry.src == null)
+                    continue;
+
+                if (entry.src.TrimEnd('/') == ".")
+                    docsetPath = docfxFilePath;
+                else
+                    docsetPath = Path.GetFullPath(entry.src, docfxFilePath);
+
+                // Check that it's a parent (or the same) directory as the input directory.
+                if (inputDirectory.FullName.StartsWith(docsetPath))
+                    break;
+            }
+
+            return docsetPath;
+        }
+
+        private static string GetUrlBasePath(string docfxFilePath)
+        {
+            // Deserialize the docfx.json file.
+            DocFx docfx = LoadDocfxFile(docfxFilePath);
+            if (docfx == null)
+            {
+                return null;
+            }
+
+            // Hack: Parse URL base path out of breadcrumbPath. Examples:
+            // "breadcrumb_path": "/visualstudio/_breadcrumb/toc.json"
+            // "breadcrumb_path":  "/windows/uwp/breadcrumbs/toc.json"
+            // "breadcrumb_path":  "/dotnet/breadcrumb/toc.json"
+            string breadcrumbPath = docfx.build.globalMetadata.breadcrumb_path;
+            // Remove everything after the second last / character.
+            breadcrumbPath = breadcrumbPath[0..breadcrumbPath.LastIndexOf('/')];
+
+            return breadcrumbPath[0..breadcrumbPath.LastIndexOf('/')];
+        }
+
+        /// <summary>
+        /// Pulls docset information, including URL base path, from the OPS config and docfx.json files.
+        /// </summary>
+        private static Dictionary<string, string> GetDocsetInfo(FileInfo opsConfigFile)
+        {
+            // Deserialize the OPS config file to get build source folders.
+            OPSConfig config = LoadOPSJson(opsConfigFile);
+            if (config == null)
+            {
+                Console.WriteLine("Could not deserialize OPS config file.");
+                return null;
+            }
+
+            var mappingInfo = new Dictionary<string, string>();
+            foreach (var sourceFolder in config.docsets_to_publish)
+            {
+                // Deserialize the corresponding docfx.json file.
+                string docfxFilePath = Path.Combine(opsConfigFile.DirectoryName, sourceFolder.build_source_folder, "docfx.json");
+                DocFx docfx = LoadDocfxFile(docfxFilePath);
+                if (docfx == null)
+                {
+                    continue;
+                }
+
+                // Hack: Parse URL base path out of breadcrumbPath. Examples:
+                // "breadcrumb_path": "/visualstudio/_breadcrumb/toc.json"
+                // "breadcrumb_path":  "/windows/uwp/breadcrumbs/toc.json"
+                // "breadcrumb_path":  "/dotnet/breadcrumb/toc.json"
+                string breadcrumbPath = docfx.build.globalMetadata.breadcrumb_path;
+                // Remove everything after the second last / character.
+                breadcrumbPath = breadcrumbPath[0..breadcrumbPath.LastIndexOf('/')];
+                string basePath = breadcrumbPath[0..breadcrumbPath.LastIndexOf('/')];
+
+                // There can be more than one "src" path.
+                foreach (var item in docfx.build.content)
+                {
+                    if (item.src == null)
+                    {
+                        // Just skip this item.
+                        continue;
+                    }
+
+                    // Examples:
+                    // "src": "./vs-2015"
+                    // "src": "./"
+
+                    // Construct the full path to where the docset files are located.
+                    string docsetFilePath = sourceFolder.build_source_folder;
+
+                    // Trim "./" off the beginning, if it's there.
+                    if (item.src.StartsWith("./"))
+                        item.src = item.src[2..];
+
+                    if (item.src.Length > 0)
+                    {
+                        if (docsetFilePath == ".")
+                            docsetFilePath = item.src;
+                        else
+                            docsetFilePath = String.Concat(docsetFilePath, "/", item.src);
+                    }
+
+                    mappingInfo.Add(docsetFilePath, basePath);
+                }
+            }
+
+            return mappingInfo;
+        }
+
+        // Classes for deserialization.
+        class OPSConfig
+        {
+            public List<Docset> docsets_to_publish { get; set; }
+        }
+        class Docset
+        {
+            public string build_source_folder { get; set; }
+        }
+        class DocFx
+        {
+            public Build build { get; set; }
+        }
+        class Build
+        {
+            public GlobalMetadata globalMetadata { get; set; }
+            public List<Content> content { get; set; }
+        }
+        class Content
+        {
+            public string src { get; set; }
+            public string dest { get; set; }
+        }
+        class GlobalMetadata
+        {
+            public string breadcrumb_path { get; set; }
+        }
+
+        /// <summary>
+        /// Deserialize OPS config file.
+        /// </summary>
+        private static OPSConfig LoadOPSJson(FileInfo opsFile)
+        {
+            using (StreamReader reader = new StreamReader(opsFile.FullName))
+            {
+                string json = reader.ReadToEnd();
+
+                try
+                {
+                    return JsonSerializer.Deserialize<OPSConfig>(json);
+                }
+                catch (JsonException e)
+                {
+                    Console.WriteLine($"Caught exception while reading OPS config file: {e.Message}");
+                    return null;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Deserialize docfx.json file.
+        /// </summary>
+        private static DocFx LoadDocfxFile(string docfxFilePath)
+        {
+            using (StreamReader reader = new StreamReader(docfxFilePath))
+            {
+                string json = reader.ReadToEnd();
+
+                try
+                {
+                    return JsonSerializer.Deserialize<DocFx>(json);
+                }
+                catch (JsonException e)
+                {
+                    Console.WriteLine($"Caught exception while reading docfx.json file: {e.Message}");
+                    return null;
+                }
+            }
+        }
+
+        /// <summary>
         /// Checks if the specified file path is referenced in the specified file.
         /// </summary>
         private static bool IsFileLinkedFromFile(FileInfo linkedFile, FileInfo linkingFile)
@@ -1886,23 +2116,19 @@ namespace CleanRepo
         /// <summary>
         /// Gets all *.md files recursively, starting in the specified directory.
         /// </summary>
-        private static List<FileInfo> GetMarkdownFiles(string directoryPath, bool searchRecursively)
+        private static List<FileInfo> GetMarkdownFiles(string directoryPath)
         {
             DirectoryInfo dir = new DirectoryInfo(directoryPath);
-            SearchOption searchOption = searchRecursively ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
-
-            return dir.EnumerateFiles("*.md", searchOption).ToList();
+            return dir.EnumerateFiles("*.md", SearchOption.AllDirectories).ToList();
         }
 
         /// <summary>
         /// Gets all *.yml files recursively, starting in the specified directory.
         /// </summary>
-        private static List<FileInfo> GetYAMLFiles(string directoryPath, bool searchRecursively)
+        private static List<FileInfo> GetYAMLFiles(string directoryPath)
         {
             DirectoryInfo dir = new DirectoryInfo(directoryPath);
-            SearchOption searchOption = searchRecursively ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
-
-            return dir.EnumerateFiles("*.yml", searchOption).ToList();
+            return dir.EnumerateFiles("*.yml", SearchOption.AllDirectories).ToList();
         }
 
         /// <summary>
