@@ -30,38 +30,40 @@ This command-line tool helps you clean up a DocFx-based content repo. It can:
 
 ## Usage examples
 
-Find orphaned articles recursively (that is, in the specified directory and any subdirectories):
+- Find orphaned articles recursively (that is, in the specified directory and any subdirectories):
 
-```
-CleanRepo.exe --orphaned-topics --start-directory c:\repos\visualstudio-docs-pr\docs\ide
-```
+  ```
+  CleanRepo.exe --orphaned-topics --start-directory c:\repos\visualstudio-docs-pr\docs\ide
+  ```
 
-Find and delete orphaned .png/.gif/.jpg/.svg files (recursive):
+- Find and delete orphaned .png/.gif/.jpg/.svg files (recursive):
 
-```
-CleanRepo.exe --orphaned-images --start-directory c:\repos\visualstudio-docs-pr\docs\ide
-```
+  ```
+  CleanRepo.exe --orphaned-images --start-directory c:\repos\visualstudio-docs-pr\docs\ide
+  ```
 
-Find and delete shared markdown files that are orphaned (recursive):
+- Find and delete shared markdown files that are orphaned (recursive):
 
-```
-CleanRepo.exe --orphaned-includes --start-directory c:\repos\visualstudio-docs-pr\docs\ide
-```
+  ```
+  CleanRepo.exe --orphaned-includes --start-directory c:\repos\visualstudio-docs-pr\docs\ide
+  ```
 
-Remove entries in the .openpublishing.redirection.json file that haven't been clicked in the last 180 days:
+- Remove entries in the .openpublishing.redirection.json file that haven't been clicked in the last 180 days:
 
-```
-CleanRepo.exe --trim-redirects --docset-root c:\users\gewarren\dotnet-docs\docs
-```
+  ```
+  CleanRepo.exe --trim-redirects --docset-root c:\users\gewarren\dotnet-docs\docs
+  ```
+  
+  This option generates an output file that includes tab-separated data showing the number of page views for each redirected URL in the specified time frame. A value of -1 means that the URL was invalid for some reason, and these redirects are NOT removed from the redirection file.
 
-Find articles with backlinks to redirected topics, and replace the links with their target URL:
+- Find articles with backlinks to redirected topics, and replace the links with their target URL:
 
-```
-CleanRepo.exe --replace-redirects --start-directory c:\repos\visualstudio-docs-pr\docs\ide
-```
+  ```
+  CleanRepo.exe --replace-redirects --start-directory c:\repos\visualstudio-docs-pr\docs\ide
+  ```
 
-Replace site-relative links with file-relative links, when the file exists (includes image links):
+- Replace site-relative links with file-relative links, when the file exists (includes image links):
 
-```
-CleanRepo.exe --relative-links -start-directory c:\repos\visualstudio-docs-pr\docs\ide
-```
+  ```
+  CleanRepo.exe --relative-links -start-directory c:\repos\visualstudio-docs-pr\docs\ide
+ ```
