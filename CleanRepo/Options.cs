@@ -6,7 +6,7 @@ namespace CleanRepo
     // Define a class to receive parsed values
     class Options
     {
-        [Option('d', "directory", HelpText = "Top-level directory in which to perform clean up (for example, find orphaned markdown files).")]
+        [Option("start-directory", HelpText = "Top-level directory in which to perform clean up (for example, find orphaned markdown files).")]
         public string InputDirectory { get; set; }
 
         [Option("docset-root", Required = false, HelpText = "The full path to the root directory for the docset, e.g. 'c:\\users\\gewarren\\dotnet-docs\\docs'.")]
@@ -15,7 +15,7 @@ namespace CleanRepo
         [Option("repo-root", Required = false, HelpText = "The full path to the local root directory for the repository, e.g. 'c:\\users\\gewarren\\dotnet-docs'.")]
         public string RepoRoot { get; set; }
 
-        [Option('g', "delete", Required = false, HelpText = "True to delete orphaned files.")]
+        [Option("delete", Required = false, HelpText = "True to delete orphaned files.")]
         public bool? Delete { get; set; }
 
         [Option("orphaned-topics", HelpText = "Use this option to find orphaned topics.")]
@@ -39,7 +39,7 @@ namespace CleanRepo
         [Option("lookback-days", Default = 180, HelpText = "The number of days to check for link-click activity.")]
         public int LinkActivityDays { get; set; }
 
-        [Option("output-file", HelpText = "The file to write the output to.")]
+        [Option("output-file", HelpText = "The file to write the redirect page view output to.")]
         public string OutputFilePath { get; set; }
 
         [Option("replace-redirects", Required = false, HelpText = "Find backlinks to redirected files and replace with new target.")]

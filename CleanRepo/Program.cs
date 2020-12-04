@@ -26,7 +26,7 @@ namespace CleanRepo
         {
 #if DEBUG
             //args = new[] { "--trim-redirects", "--docset-root=c:\\users\\gewarren\\dotnet-docs\\docs", "--lookback-days=90", "--output-file=c:\\users\\gewarren\\desktop\\clicks.txt" };
-            args = new[] { "--relative-links" };
+            args = new[] { "--trim-redirects" };
 #endif
 
             Parser.Default.ParseArguments<Options>(args).WithParsed(RunOptions);
@@ -265,7 +265,7 @@ namespace CleanRepo
                 // Page view output.
                 if (String.IsNullOrEmpty(options.OutputFilePath))
                 {
-                    Console.WriteLine("\nEnter the name (and path) of a file to write the page view data to:");
+                    Console.WriteLine("Enter the name (and path) of a file to write the page view data to:");
                     options.OutputFilePath = Console.ReadLine();
 
                     // Check that the file is accessible so it actually works when we need it.
@@ -1938,19 +1938,20 @@ namespace CleanRepo
                 // "breadcrumb_path":  "/windows/uwp/breadcrumbs/toc.json"
                 // "breadcrumb_path":  "/dotnet/breadcrumb/toc.json"
                 string breadcrumbPath = docfx.build.globalMetadata.breadcrumb_path;
-                // Remove everything after the second last / character.
+                // Remove everything after and including the second last / character.
                 breadcrumbPath = breadcrumbPath[0..breadcrumbPath.LastIndexOf('/')];
                 string basePath = breadcrumbPath[0..breadcrumbPath.LastIndexOf('/')];
+
+                if (basePath.StartsWith('~'))
+                {
+                    // We can't get the URL base path automatically, so ask the user.
+                    Console.WriteLine($"What's the URL base path for articles in the `{sourceFolder.build_source_folder}` directory? (Example: aspnet/core)");
+                    basePath = Console.ReadLine();
+                }
 
                 // There can be more than one "src" path.
                 foreach (var item in docfx.build.content)
                 {
-                    if (item.src == null)
-                    {
-                        // Just skip this item.
-                        continue;
-                    }
-
                     // Examples:
                     // "src": "./vs-2015"
                     // "src": "./"
@@ -1958,19 +1959,23 @@ namespace CleanRepo
                     // Construct the full path to where the docset files are located.
                     string docsetFilePath = sourceFolder.build_source_folder;
 
-                    // Trim "./" off the beginning, if it's there.
-                    if (item.src.StartsWith("./"))
-                        item.src = item.src[2..];
-
-                    if (item.src.Length > 0)
+                    if (item.src != null && item.src != ".")
                     {
-                        if (docsetFilePath == ".")
-                            docsetFilePath = item.src;
-                        else
-                            docsetFilePath = String.Concat(docsetFilePath, "/", item.src);
+                        // Trim "./" off the beginning, if it's there.
+                        if (item.src.StartsWith("./"))
+                            item.src = item.src[2..];
+
+                        if (item.src.Length > 0)
+                        {
+                            if (docsetFilePath == ".")
+                                docsetFilePath = item.src;
+                            else
+                                docsetFilePath = String.Concat(docsetFilePath, "/", item.src);
+                        }
                     }
 
-                    mappingInfo.Add(docsetFilePath, basePath);
+                    if (!mappingInfo.ContainsKey(docsetFilePath))
+                        mappingInfo.Add(docsetFilePath, basePath);
                 }
             }
 
