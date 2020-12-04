@@ -1945,7 +1945,7 @@ namespace CleanRepo
                 if (basePath.StartsWith('~'))
                 {
                     // We can't get the URL base path automatically, so ask the user.
-                    Console.WriteLine($"What's the URL base path for articles in the `{sourceFolder.build_source_folder}` directory? (Example: aspnet/core)");
+                    Console.WriteLine($"What's the URL base path for articles in the `{sourceFolder.build_source_folder}` directory? (Example: /aspnet/core)");
                     basePath = Console.ReadLine();
                 }
 
