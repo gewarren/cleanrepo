@@ -56,7 +56,7 @@ namespace CleanRepo
                     options.Delete = false;
                     Console.WriteLine("\nDo you want to delete orphans (y or n)?\n");
                     var info = Console.ReadKey();
-                    if (info.KeyChar == 'y' && info.KeyChar == 'Y')
+                    if (info.KeyChar == 'y' || info.KeyChar == 'Y')
                     {
                         options.Delete = true;
                     }
@@ -112,7 +112,7 @@ namespace CleanRepo
                     options.Delete = false;
                     Console.WriteLine("\nDo you want to delete orphans (y or n)?\n");
                     var info = Console.ReadKey();
-                    if (info.KeyChar == 'y' && info.KeyChar == 'Y')
+                    if (info.KeyChar == 'y' || info.KeyChar == 'Y')
                     {
                         options.Delete = true;
                     }
@@ -149,7 +149,7 @@ namespace CleanRepo
                     options.Delete = false;
                     Console.WriteLine("\nDo you want to delete orphans (y or n)?\n");
                     var info = Console.ReadKey();
-                    if (info.KeyChar == 'y' && info.KeyChar == 'Y')
+                    if (info.KeyChar == 'y' || info.KeyChar == 'Y')
                     {
                         options.Delete = true;
                     }
@@ -187,7 +187,7 @@ namespace CleanRepo
                     options.Delete = false;
                     Console.WriteLine("\nDo you want to delete orphans (y or n)?\n");
                     var info = Console.ReadKey();
-                    if (info.KeyChar == 'y' && info.KeyChar == 'Y')
+                    if (info.KeyChar == 'y' || info.KeyChar == 'Y')
                     {
                         options.Delete = true;
                     }
@@ -1392,198 +1392,202 @@ namespace CleanRepo
         /// </summary>
         private static void TrimRedirectEntries(FileInfo redirectsFileInfo, Dictionary<string, string> docsets, int lookbackDays, string outputFile)
         {
-            RedirectFile redirectFile = LoadRedirectJson(redirectsFileInfo);
-            if (redirectFile is null)
-            {
-                Console.WriteLine("Deserialization of redirection file failed.");
-                return;
-            }
+            throw new NotImplementedException();
 
-            // Set up Kusto client.
-            KustoConnectionStringBuilder builder = new KustoConnectionStringBuilder("https://cgadataout.kusto.windows.net/;Fed=true", "CustomerTouchPoint");
-            var client = Kusto.Data.Net.Client.KustoClientFactory.CreateCslQueryProvider(builder);
+            //RedirectFile redirectFile = LoadRedirectJson(redirectsFileInfo);
+            //if (redirectFile is null)
+            //{
+            //    Console.WriteLine("Deserialization of redirection file failed.");
+            //    return;
+            //}
 
-            // Tracks which redirects to remove.
-            var noClickRedirects = new List<Redirect>();
-            // For link-click output.
-            var sb = new StringBuilder();
+            //// Set up Kusto client.
+            //KustoConnectionStringBuilder builder = new KustoConnectionStringBuilder("https://cgadataout.kusto.windows.net/;Fed=true", "CustomerTouchPoint");
+            //var client = Kusto.Data.Net.Client.KustoClientFactory.CreateCslQueryProvider(builder);
 
-            //for (int i = 0; i < redirectFile.redirections.Count && i < 50; i++)
-            for (int i = 0; i < redirectFile.redirections.Count; i++)
-            {
-                // Output for long-running jobs.
-                if ((i % 50 == 0) && (i > 0))
-                {
-                    Console.WriteLine($"Progress update: Checked {i} of {redirectFile.redirections.Count} redirects.");
-                }
+            //// Tracks which redirects to remove.
+            //var noClickRedirects = new List<Redirect>();
+            //// For link-click output.
+            //var sb = new StringBuilder();
 
-                Redirect redirect = redirectFile.redirections[i];
+            ////for (int i = 0; i < redirectFile.redirections.Count && i < 50; i++)
+            //for (int i = 0; i < redirectFile.redirections.Count; i++)
+            //{
+            //    // Output for long-running jobs.
+            //    if ((i % 50 == 0) && (i > 0))
+            //    {
+            //        Console.WriteLine($"Progress update: Checked {i} of {redirectFile.redirections.Count} redirects.");
+            //    }
 
-                // If the redirect has a moniker, we don't know how to construct the URL, so ignore it.
-                // TODO: To query page views on redirects with a moniker, 
-                // probably just add "?view=<moniker>" to the end of the URL.
-                // But what if there are multiple monikers?
-                if (redirect.monikers != null)
-                    continue;
+            //    Redirect redirect = redirectFile.redirections[i];
 
-                // Trim off the file extension.
-                string trimmedPath = redirect.source_path[0..redirect.source_path.LastIndexOf('.')];
+            //    // If the redirect has a moniker, we don't know how to construct the URL, so ignore it.
+            //    // TODO: To query page views on redirects with a moniker, 
+            //    // probably just add "?view=<moniker>" to the end of the URL.
+            //    // But what if there are multiple monikers?
+            //    if (redirect.monikers != null)
+            //        continue;
 
-                // If the file name is exactly "index", remove it from the URL.
-                if (String.Compare(trimmedPath[(trimmedPath.LastIndexOf('/') + 1)..].ToLowerInvariant(), "index") == 0)
-                {
-                    trimmedPath = trimmedPath[0..(trimmedPath.LastIndexOf('/') + 1)];
-                }
+            //    // Trim off the file extension.
+            //    string trimmedPath = redirect.source_path[0..redirect.source_path.LastIndexOf('.')];
 
-                string urlBasePath = null;
+            //    // If the file name is exactly "index", remove it from the URL.
+            //    if (String.Compare(trimmedPath[(trimmedPath.LastIndexOf('/') + 1)..].ToLowerInvariant(), "index") == 0)
+            //    {
+            //        trimmedPath = trimmedPath[0..(trimmedPath.LastIndexOf('/') + 1)];
+            //    }
 
-                // Trim off the beginning of the path and obtain the corresponding base path for the URL.
-                foreach (var docset in docsets)
-                {
-                    if (trimmedPath.StartsWith(docset.Key))
-                    {
-                        trimmedPath = trimmedPath[(docset.Key.Length + 1)..];
-                        urlBasePath = docset.Value;
-                        break;
-                    }
-                }
+            //    string urlBasePath = null;
 
-                if (String.IsNullOrEmpty(urlBasePath))
-                {
-                    // Ignore this redirect.
-                    continue;
-                }
+            //    // Trim off the beginning of the path and obtain the corresponding base path for the URL.
+            //    foreach (var docset in docsets)
+            //    {
+            //        if (trimmedPath.StartsWith(docset.Key))
+            //        {
+            //            trimmedPath = trimmedPath[(docset.Key.Length + 1)..];
+            //            urlBasePath = docset.Value;
+            //            break;
+            //        }
+            //    }
 
-                // Construct the URL to the article.
-                string sourcePathUrl = $"{urlBasePath}/{trimmedPath}";
+            //    if (String.IsNullOrEmpty(urlBasePath))
+            //    {
+            //        // Ignore this redirect.
+            //        continue;
+            //    }
 
-                long clicks = -1;
-                try
-                {
-                    clicks = NumberOfClicks(sourcePathUrl);
-                }
-                catch (Exception ex)
-                {
-                    if (ex is KustoClientException || ex is KustoServiceException)
-                    {
-                        // Finish up with the data we have and then exit.
-                        break;
-                    }
+            //    // Construct the URL to the article.
+            //    string sourcePathUrl = $"{urlBasePath}/{trimmedPath}";
 
-                    throw;
-                }
+            //    long clicks = -1;
+            //    try
+            //    {
+            //        clicks = NumberOfClicks(sourcePathUrl);
+            //    }
+            //    catch (Exception ex)
+            //    {
+            //        if (ex is KustoClientException || ex is KustoServiceException)
+            //        {
+            //            // Finish up with the data we have and then exit.
+            //            Console.WriteLine("Caught a KustoClientException or KustoServiceException exception. Exiting the program.");
+            //            break;
+            //        }
 
-                // Differentiate between invalid URL and no page views
-                if (clicks == 0)
-                {
-                    string liveUrl = String.Concat("https://docs.microsoft.com/en-us", sourcePathUrl);
-                    bool isValidUrl = false;
+            //        throw;
+            //    }
 
-                    try
-                    {
-                        isValidUrl = IsUrlValid(liveUrl);
-                    }
-                    catch (Exception ex)
-                    {
-                        if (ex is KustoClientException || ex is KustoServiceException)
-                        {
-                            // Finish up with the data we have and then exit.
-                            break;
-                        }
+            //    // Differentiate between invalid URL and no page views
+            //    if (clicks == 0)
+            //    {
+            //        string liveUrl = String.Concat("https://docs.microsoft.com/en-us", sourcePathUrl);
+            //        bool isValidUrl = false;
 
-                        throw;
-                    }
+            //        try
+            //        {
+            //            isValidUrl = IsUrlValid(liveUrl);
+            //        }
+            //        catch (Exception ex)
+            //        {
+            //            if (ex is KustoClientException || ex is KustoServiceException)
+            //            {
+            //                // Finish up with the data we have and then exit.
+            //                Console.WriteLine("Caught a KustoClientException or KustoServiceException exception. Exiting the program.");
+            //                break;
+            //            }
 
-                    if (isValidUrl)
-                    {
-                        // It's a valid URL with no recent page views.
-                        noClickRedirects.Add(redirect);
-                    }
-                    else
-                    {
-                        // Invalid URL, so don't delete redirect entry
-                        // in case we constructed the URL incorrectly.
-                        clicks = -1;
-                    }
-                }
+            //            throw;
+            //        }
 
-                sb.AppendLine($"{sourcePathUrl}\t{clicks}");
-            }
+            //        if (isValidUrl)
+            //        {
+            //            // It's a valid URL with no recent page views.
+            //            noClickRedirects.Add(redirect);
+            //        }
+            //        else
+            //        {
+            //            // Invalid URL, so don't delete redirect entry
+            //            // in case we constructed the URL incorrectly.
+            //            clicks = -1;
+            //        }
+            //    }
 
-            // Remove any defunct redirects.
-            foreach (var redirect in noClickRedirects)
-            {
-                redirectFile.redirections.Remove(redirect);
-            }
+            //    sb.AppendLine($"{sourcePathUrl}\t{clicks}");
+            //}
 
-            // Serialize the new list of redirects to the file.
-            WriteRedirectJson(redirectsFileInfo.FullName, redirectFile);
+            //// Remove any defunct redirects.
+            //foreach (var redirect in noClickRedirects)
+            //{
+            //    redirectFile.redirections.Remove(redirect);
+            //}
 
-            // Write the link-click output to a file.
-            File.WriteAllText(outputFile, sb.ToString());
+            //// Serialize the new list of redirects to the file.
+            //WriteRedirectJson(redirectsFileInfo.FullName, redirectFile);
 
-            Console.WriteLine($"\nRemoved a total of {noClickRedirects.Count} inactive redirect entries. Tab-separated page view data written to {outputFile}.");
+            //// Write the link-click output to a file.
+            //File.WriteAllText(outputFile, sb.ToString());
 
-            long NumberOfClicks(string url)
-            {
-                string query = @"PageView | where Site == ""docs.microsoft.com"" | where StartDateTime > ago(" + lookbackDays +
-                    @"d) | where Url endswith """ + url + @""" | summarize PageViews=dcount(PageViewId) by ContentId";
+            //Console.WriteLine($"\nRemoved a total of {noClickRedirects.Count} inactive redirect entries. Tab-separated page view data written to {outputFile}.");
 
-                IDataReader reader = null;
-                try
-                {
-                    reader = client.ExecuteQuery(query);
-                }
-                catch (DataTableIncompleteDataStreamException)
-                {
-                    // Just ignore this redirect for now.
-                    Console.WriteLine("Caught DataTableIncompleteDataStreamException. Will continue on with the next redirect.");
-                    return -1;
-                }
+            //long NumberOfClicks(string url)
+            //{
+            //    string query = @"PageView | where Site == ""docs.microsoft.com"" | where StartDateTime > ago(" + lookbackDays +
+            //        @"d) | where Url endswith """ + url + @""" | summarize PageViews=dcount(PageViewId) by ContentId";
 
-                long numClicks = 0;
+            //    IDataReader reader = null;
+            //    try
+            //    {
+            //        reader = client.ExecuteQuery(query);
+            //    }
+            //    catch (DataTableIncompleteDataStreamException)
+            //    {
+            //        // Just ignore this redirect for now.
+            //        Console.WriteLine("Caught DataTableIncompleteDataStreamException. Will continue on with the next redirect.");
+            //        return -1;
+            //    }
 
-                if (reader != null && reader.FieldCount == 2)
-                {
-                    if (reader.Read())
-                    {
-                        numClicks = reader.GetInt64(reader.GetOrdinal("PageViews"));
-                    }
+            //    long numClicks = 0;
 
-                    reader.Close();
-                }
+            //    if (reader != null && reader.FieldCount == 2)
+            //    {
+            //        if (reader.Read())
+            //        {
+            //            numClicks = reader.GetInt64(reader.GetOrdinal("PageViews"));
+            //        }
 
-                return numClicks;
-            }
+            //        reader.Close();
+            //    }
 
-            bool IsUrlValid(string LiveUrl)
-            {
-                string query = @"TopicMetadata | where LiveUrl == """ + LiveUrl + @""" | distinct ContentId";
+            //    return numClicks;
+            //}
 
-                IDataReader reader = null;
-                try
-                {
-                    reader = client.ExecuteQuery(query);
-                }
-                catch (DataTableIncompleteDataStreamException)
-                {
-                    // Could still be valid, but return false just in case.
-                    return false;
-                }
+            //bool IsUrlValid(string LiveUrl)
+            //{
+            //    string query = @"TopicMetadata | where LiveUrl == """ + LiveUrl + @""" | distinct ContentId";
 
-                bool isValid = false;
-                if (reader != null && reader.FieldCount == 1)
-                {
-                    if (reader.Read())
-                    {
-                        isValid = true;
-                    }
+            //    IDataReader reader = null;
+            //    try
+            //    {
+            //        reader = client.ExecuteQuery(query);
+            //    }
+            //    catch (DataTableIncompleteDataStreamException)
+            //    {
+            //        // Could still be valid, but return false just in case.
+            //        return false;
+            //    }
 
-                    reader.Close();
-                }
+            //    bool isValid = false;
+            //    if (reader != null && reader.FieldCount == 1)
+            //    {
+            //        if (reader.Read())
+            //        {
+            //            isValid = true;
+            //        }
 
-                return isValid;
-            }
+            //        reader.Close();
+            //    }
+
+            //    return isValid;
+            //}
         }
 
         /// <summary>
