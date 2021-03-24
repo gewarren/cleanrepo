@@ -26,7 +26,7 @@ namespace CleanRepo
         {
 #if DEBUG
             //args = new[] { "--trim-redirects", "--docset-root=c:\\users\\gewarren\\dotnet-docs\\docs", "--lookback-days=90", "--output-file=c:\\users\\gewarren\\desktop\\clicks.txt" };
-            args = new[] { "--trim-redirects" };
+            args = new[] { "--replace-redirects" };
 #endif
 
             Parser.Default.ParseArguments<Options>(args).WithParsed(RunOptions);
@@ -566,6 +566,9 @@ namespace CleanRepo
             {
                 // Determine the file-relative path to absolutePath.
                 string fileRelativePath = Path.GetRelativePath(linkingFile.DirectoryName, absolutePath);
+
+                // Replace backslashes with forward slashes.
+                fileRelativePath = fileRelativePath.Replace(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
                 if (fileRelativePath != null)
                 {
@@ -1366,7 +1369,7 @@ namespace CleanRepo
                 }
                 catch (JsonException e)
                 {
-                    Console.WriteLine($"Caught exception while reading JSON file: {e.Message}");
+                    Console.WriteLine($"Caught exception while reading JSON file: {e.Message} {e.InnerException?.Message}");
                     return null;
                 }
             }
