@@ -213,7 +213,7 @@ namespace CleanRepo
             string json = JsonSerializer.Serialize(ImageRefs, options);
 
             // Create a new file path.
-            string fileName = $"ImageFiles-{BasePathUrl.TrimStart('/').Replace('/', '-')}-{DateTime.Now.Ticks.ToString()}.txt";
+            string fileName = $"ImageFiles-{BasePathUrl.TrimStart('/').Replace('/', '-')}-{DateTime.Now.Ticks.ToString()}.json";
             string outputPath = Path.Combine(Path.GetTempPath(), fileName);
             File.WriteAllText(outputPath, json);
 
