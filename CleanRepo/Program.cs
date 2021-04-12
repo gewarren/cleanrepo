@@ -26,7 +26,7 @@ namespace CleanRepo
         {
 #if DEBUG
             //args = new[] { "--trim-redirects", "--docset-root=c:\\users\\gewarren\\dotnet-docs\\docs", "--lookback-days=90", "--output-file=c:\\users\\gewarren\\desktop\\clicks.txt" };
-            args = new[] { "--replace-redirects" };
+            args = new[] { "--catalog-images" };
 #endif
 
             Parser.Default.ParseArguments<Options>(args).WithParsed(RunOptions);
@@ -89,19 +89,18 @@ namespace CleanRepo
                     return;
                 }
 
+                DocFxRepo repo = new DocFxRepo(options.InputDirectory);
+
                 // Check that this directory or one of its ancestors has a docfx.json file.
                 // I.e. we don't want it to be a parent directory of a docfx.json directory, so single docset only.
-                var directory = new DirectoryInfo(options.InputDirectory);
-                DirectoryInfo docfxDir = GetDocFxDirectory(directory);
-                if (docfxDir == null)
+                if (repo.DocFxDirectory == null)
                 {
                     Console.WriteLine("\nCould not find the docfx.json file for this directory.");
                     return;
                 }
 
                 // Get the base path URL for the docset.
-                string basePathUrl = GetUrlBasePath(Path.Combine(docfxDir.FullName, "docfx.json"));
-                if (basePathUrl == null)
+                if (repo.BasePathUrl == null)
                 {
                     Console.WriteLine("\nCould not find the base path URL for this directory.");
                     return;
@@ -120,15 +119,42 @@ namespace CleanRepo
 
                 Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory recursively for orphaned .png/.jpg/.gif/.svg files...\n");
 
-                Dictionary<string, int> imageFiles = GetMediaFiles(options.InputDirectory);
-
-                if (imageFiles.Count == 0)
+                repo.ListOrphanedImages(options.Delete.Value);
+            }
+            else if (options.CatalogImages)
+            {
+                // Get input directory.
+                if (String.IsNullOrEmpty(options.InputDirectory))
                 {
-                    Console.WriteLine("\nNo .png/.jpg/.gif/.svg files were found!");
+                    Console.WriteLine("\nEnter the path to the directory where you want to catalog image links:\n");
+                    options.InputDirectory = Console.ReadLine();
+                }
+                if (String.IsNullOrEmpty(options.InputDirectory) || !Directory.Exists(options.InputDirectory))
+                {
+                    Console.WriteLine("\nThat directory doesn't exist.");
                     return;
                 }
 
-                ListOrphanedImages(options.InputDirectory, imageFiles, basePathUrl, options.Delete.Value);
+                DocFxRepo repo = new DocFxRepo(options.InputDirectory);
+
+                // Check that this directory or one of its ancestors has a docfx.json file.
+                // I.e. we don't want it to be a parent directory of a docfx.json directory, so single docset only.
+                if (repo.DocFxDirectory == null)
+                {
+                    Console.WriteLine("\nCould not find the docfx.json file for this directory.");
+                    return;
+                }
+
+                // Get the base path URL for the docset.
+                if (repo.BasePathUrl == null)
+                {
+                    Console.WriteLine("\nCould not find the base path URL for this directory.");
+                    return;
+                }
+
+                Console.WriteLine($"\nCataloging the images in the '{options.InputDirectory}' directory...\n");
+
+                repo.OutputImageReferences();
             }
             // Find orphaned include-type files
             else if (options.FindOrphanedIncludes)
@@ -318,7 +344,7 @@ namespace CleanRepo
                 }
 
                 // Get the base path URL for the docset.
-                string urlBasePath = GetUrlBasePath(Path.Combine(docfxDir.FullName, "docfx.json"));
+                string urlBasePath = GetUrlBasePath(docfxDir);
                 if (urlBasePath == null)
                 {
                     Console.WriteLine("\nCould not find the base path URL for this directory.");
@@ -859,236 +885,6 @@ namespace CleanRepo
         }
         #endregion
 
-        #region Orphaned images
-        /// <summary>
-        /// If any of the input image files are not
-        /// referenced from a markdown (.md) or YAML (.yml) file anywhere in the docset, including up the directory 
-        /// until the docfx.json file is found, the file path of those files is written to the console.
-        /// </summary>
-        /// TODO: Improve the perf of this method using the following pseudo code:
-        /// For each image
-        ///    For each markdown file
-        ///       Do a RegEx search for the image
-        ///          If found, BREAK to the next image
-        private static void ListOrphanedImages(string inputDirectory, Dictionary<string, int> imageFiles, string docsetName, bool deleteOrphanedImages)
-        {
-            // Get Markdown files
-            var files = GetAllMarkdownFiles(inputDirectory, out DirectoryInfo rootDirectory);
-
-            if (files is null)
-            {
-                return;
-            }
-
-            // Add YAML files
-            files.AddRange(GetAllYamlFiles(inputDirectory, out rootDirectory));
-
-            // Gather up all the image references and increment the count for that image in the Dictionary.
-            //foreach (var file in files)
-            Parallel.ForEach(files, file =>
-            {
-                foreach (string line in File.ReadAllLines(file.FullName))
-                {
-                    /* Support all of the following variations:
-                    *
-                    [hello](media/how-to-use-lightboxes/xamarin.png#lightbox)
-                    ![Auto hide](../ide/media/vs2015_auto_hide.png)
-                    ![Unit Test Explorer showing Run All button](../test/media/unittestexplorer-beta-.png "UnitTestExplorer(beta)")
-                    ![Architecture](./media/ci-cd-flask/Architecture.PNG?raw=true)
-                    The Light Bulb icon ![Small Light Bulb Icon](media/vs2015_lightbulbsmall.png "VS2017_LightBulbSmall")
-                    imageSrc: ./media/vs-mac-2019.svg
-                    <img src="/azure/mydocs/media/pic3.png" alt="Work Backlogs page shortcuts"/>
-                    [0]: ../../media/vs-acr-provisioning-dialog-2019.png
-                    :::image type="complex" source="./media/seedwork-classes.png" alt-text="Screenshot of the SeedWork folder.":::
-                    :::image type="content" source="../media/rpi.png" lightbox="../media/rpi-lightbox.png":::
-                    *
-                    * Does not currently support file names that contain parentheses:
-                    * [VS image](../media/pic(azure)_1.png)
-                    */
-
-                    // RegEx pattern to match
-                    string mdImageRegEx = @"\]\(([^\)]*?\.(png|jpg|gif|svg))";
-
-                    // There could be more than one image reference on the line, hence the foreach loop.
-                    foreach (Match match in Regex.Matches(line, mdImageRegEx, RegexOptions.IgnoreCase))
-                    {
-                        string path = match.Groups[1].Value.Trim();
-
-                        ProcessImagePath(path, docsetName, rootDirectory, file, imageFiles, match.Groups[0].Value);
-                    }
-
-                    // Match "img src=" references
-                    // Example: <img data-hoverimage="./images/getstarted.svg" src="./images/getstarted.png" alt="Get started icon" />
-                    // Example: <img style="display: none;" alt="Anaconda" src="_img/index/logo_anaconda.png" data-linktype="external" data-hoverimage="_img/index/logo_anaconda.png">
-
-                    string htmlImageRegEx = "<img[^>]*?src[ ]*=[ ]*\"([^>]*?.(png|gif|jpg|svg))[ ]*\"";
-                    foreach (Match match in Regex.Matches(line, htmlImageRegEx, RegexOptions.IgnoreCase))
-                    {
-                        string path = match.Groups[1].Value.Trim();
-
-                        ProcessImagePath(path, docsetName, rootDirectory, file, imageFiles, match.Groups[0].Value);
-                    }
-
-                    // Match reference-style image links
-                    // Example: [0]: ../../media/vs-acr-provisioning-dialog-2019.png
-
-                    string referenceLinkRegEx = @"\[.*\]:(.*\.(png|gif|jpg|svg))";
-                    foreach (Match match in Regex.Matches(line, referenceLinkRegEx, RegexOptions.IgnoreCase))
-                    {
-                        string path = match.Groups[1].Value.Trim();
-
-                        ProcessImagePath(path, docsetName, rootDirectory, file, imageFiles, match.Groups[0].Value);
-                    }
-
-                    // Match imageSrc image links
-                    // Example: imageSrc: ./media/vs-mac-2019.svg
-
-                    string imageSrcRegEx = @"imageSrc:([^:]*\.(png|gif|jpg|svg))";
-                    foreach (Match match in Regex.Matches(line, imageSrcRegEx, RegexOptions.IgnoreCase))
-                    {
-                        string path = match.Groups[1].Value.Trim();
-
-                        ProcessImagePath(path, docsetName, rootDirectory, file, imageFiles, match.Groups[0].Value);
-                    }
-
-                    // Match ::: image links
-                    // Example: :::image type="complex" source="./media/seedwork-classes.png" alt-text="Screenshot of SeedWork folder.":::
-                    // Example :::image type = "content" lightbox="../media/rpi-lightbox.png":::
-
-                    string tripleColonRegEx = @":::image .*?source=""[^:]*?\.(png|gif|jpg|svg)""[^:]*?:::";
-                    foreach (Match match in Regex.Matches(line, tripleColonRegEx, RegexOptions.IgnoreCase))
-                    {
-                        // There could be two images in this string - a source image and a lightbox image.
-                        string sourceOrLightboxRegEx = @"(source|lightbox)=""(.*?\.(png|gif|jpg|svg))""";
-                        foreach (Match submatch in Regex.Matches(match.Groups[0].Value, sourceOrLightboxRegEx, RegexOptions.IgnoreCase))
-                        {
-                            string path = submatch.Groups[2].Value.Trim();
-
-                            ProcessImagePath(path, docsetName, rootDirectory, file, imageFiles, match.Groups[0].Value);
-                        }
-                    }
-                }
-            });
-
-            int count = 0;
-
-            // Print out the image files with zero references.
-            StringBuilder output = new StringBuilder();
-            foreach (var image in imageFiles)
-            {
-                if (image.Value == 0)
-                {
-                    count++;
-                    output.AppendLine(Path.GetFullPath(image.Key));
-                }
-            }
-
-            if (deleteOrphanedImages)
-            {
-                // Delete orphaned image files
-                foreach (var image in imageFiles)
-                {
-                    if (image.Value == 0)
-                    {
-                        try
-                        {
-                            File.Delete(image.Key);
-                        }
-                        catch (PathTooLongException)
-                        {
-                            output.AppendLine($"Unable to delete {image.Key} because its path is too long.");
-                        }
-                    }
-                }
-            }
-
-            string deleted = deleteOrphanedImages ? "and deleted " : "";
-
-            Console.WriteLine($"\nFound {deleted}{count} orphaned .png/.jpg/.gif/.svg files:\n");
-            Console.WriteLine(output.ToString());
-            Console.WriteLine("DONE");
-        }
-
-        private static void ProcessImagePath(string path, string docsetName, DirectoryInfo rootDirectory, FileInfo file, Dictionary<string, int> imageFiles, string fullMatch)
-        {
-            if (path.StartsWith("http:") || path.StartsWith("https:"))
-            {
-                // This could be an absolute URL to a file in the repo, so check.
-                string httpRegex = @"https?:\/\/docs.microsoft.com\/([A-z][A-z]-[A-z][A-z]\/)?" + docsetName + @"\/";
-                var httpMatch = Regex.Match(path, httpRegex, RegexOptions.IgnoreCase);
-
-                if (!httpMatch.Success)
-                {
-                    // The file is in a different repo, so ignore it.
-                    return;
-                }
-
-                // Chop off the https://docs.microsoft.com/docset/ part of the path.
-                path = path.Substring(httpMatch.Value.Length);
-            }
-            else if (path.StartsWith("/"))
-            {
-                if (!path.StartsWith("/" + docsetName + "/"))
-                {
-                    // The file is in a different repo, so ignore it.
-                    return;
-                }
-
-                // Trim off the docset name, but leave the forward slash that follows it.
-                path = path.Substring(docsetName.Length + 1);
-            }
-
-            if (path != null)
-            {
-                // Construct the full path to the referenced image file
-                string absolutePath;
-                try
-                {
-                    // Path could start with a tilde e.g. ~/media/pic1.png
-                    // This case also includes site-relative links to files in the same repo where
-                    // we've already trimmed off the docset name.
-                    if (path.StartsWith("~/") || path.StartsWith("/"))
-                    {
-                        absolutePath = Path.Combine(rootDirectory.FullName, path.TrimStart('~', '/'));
-                    }
-                    else
-                    {
-                        absolutePath = Path.Combine(file.DirectoryName, path);
-                    }
-                }
-                catch (ArgumentException)
-                {
-                    Console.WriteLine($"Possible bad image link '{fullMatch}' in file '{file.FullName}'.\n");
-                    return;
-                }
-
-                // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
-                try
-                {
-                    absolutePath = Path.GetFullPath(absolutePath);
-                }
-                catch (ArgumentException)
-                {
-                    //Console.WriteLine($"Possible bad image link '{match.Groups[0].Value}' in file '{file.FullName}'.\n");
-                    Console.WriteLine($"Possible bad image link '{fullMatch}' in file '{file.FullName}'.\n");
-                    return;
-                }
-
-                if (absolutePath != null)
-                {
-                    TryIncrementFile(absolutePath, imageFiles);
-                }
-            }
-
-            void TryIncrementFile(string key, Dictionary<string, int> fileMap)
-            {
-                if (fileMap.ContainsKey(key))
-                {
-                    ++fileMap[key];
-                }
-            }
-        }
-
         private static string TryGetFullPath(string path)
         {
             try
@@ -1101,42 +897,6 @@ namespace CleanRepo
                 return null;
             }
         }
-
-        /// <summary>
-        /// Returns a dictionary of all .png/.jpg/.gif/.svg files in the directory.
-        /// The search includes the specified directory and (optionally) all its subdirectories.
-        /// </summary>
-        private static Dictionary<string, int> GetMediaFiles(string mediaDirectory, bool searchRecursively = true)
-        {
-            DirectoryInfo dir = new DirectoryInfo(mediaDirectory);
-
-            SearchOption searchOption = searchRecursively ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
-
-            Dictionary<string, int> mediaFiles = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-
-            foreach (var file in dir.EnumerateFiles("*.png", searchOption))
-            {
-                mediaFiles.Add(file.FullName.ToLower(), 0);
-            }
-
-            foreach (var file in dir.EnumerateFiles("*.jpg", searchOption))
-            {
-                mediaFiles.Add(file.FullName.ToLower(), 0);
-            }
-
-            foreach (var file in dir.EnumerateFiles("*.gif", searchOption))
-            {
-                mediaFiles.Add(file.FullName.ToLower(), 0);
-            }
-
-            foreach (var file in dir.EnumerateFiles("*.svg", searchOption))
-            {
-                mediaFiles.Add(file.FullName.ToLower(), 0);
-            }
-
-            return mediaFiles;
-        }
-        #endregion
 
         #region Orphaned articles
         /// <summary>
@@ -1896,8 +1656,10 @@ namespace CleanRepo
             return docsetPath;
         }
 
-        private static string GetUrlBasePath(string docfxFilePath)
+        internal static string? GetUrlBasePath(DirectoryInfo docFxDirectory)
         {
+            string docfxFilePath = Path.Combine(docFxDirectory.FullName, "docfx.json");
+
             // Deserialize the docfx.json file.
             DocFx docfx = LoadDocfxFile(docfxFilePath);
             if (docfx == null)
@@ -1909,11 +1671,19 @@ namespace CleanRepo
             // "breadcrumb_path": "/visualstudio/_breadcrumb/toc.json"
             // "breadcrumb_path":  "/windows/uwp/breadcrumbs/toc.json"
             // "breadcrumb_path":  "/dotnet/breadcrumb/toc.json"
-            string breadcrumbPath = docfx.build.globalMetadata.breadcrumb_path;
-            // Remove everything after the second last / character.
-            breadcrumbPath = breadcrumbPath[0..breadcrumbPath.LastIndexOf('/')];
 
-            return breadcrumbPath[0..breadcrumbPath.LastIndexOf('/')];
+            string? breadcrumbPath = docfx.build.globalMetadata.breadcrumb_path;
+
+            if (breadcrumbPath is not null)
+            {
+                // Remove everything after and including the second last / character.
+                breadcrumbPath = breadcrumbPath[0..breadcrumbPath.LastIndexOf('/')];
+                return breadcrumbPath[0..breadcrumbPath.LastIndexOf('/')];
+            }
+
+                // We can't get the URL base path automatically, so ask the user.
+                Console.WriteLine($"What's the URL base path for articles in the `{docFxDirectory.FullName}` directory? (Example: /aspnet/core)");
+                return Console.ReadLine();
         }
 
         /// <summary>
@@ -1944,12 +1714,18 @@ namespace CleanRepo
                 // "breadcrumb_path": "/visualstudio/_breadcrumb/toc.json"
                 // "breadcrumb_path":  "/windows/uwp/breadcrumbs/toc.json"
                 // "breadcrumb_path":  "/dotnet/breadcrumb/toc.json"
-                string breadcrumbPath = docfx.build.globalMetadata.breadcrumb_path;
-                // Remove everything after and including the second last / character.
-                breadcrumbPath = breadcrumbPath[0..breadcrumbPath.LastIndexOf('/')];
-                string basePath = breadcrumbPath[0..breadcrumbPath.LastIndexOf('/')];
 
-                if (basePath.StartsWith('~'))
+                string? breadcrumbPath = docfx.build.globalMetadata.breadcrumb_path;
+                string basePath = "";
+
+                if (breadcrumbPath is not null)
+                {
+                    // Remove everything after and including the second last / character.
+                    breadcrumbPath = breadcrumbPath[0..breadcrumbPath.LastIndexOf('/')];
+                    basePath = breadcrumbPath[0..breadcrumbPath.LastIndexOf('/')];
+                }
+
+                if (breadcrumbPath is null || basePath.StartsWith('~'))
                 {
                     // We can't get the URL base path automatically, so ask the user.
                     Console.WriteLine($"What's the URL base path for articles in the `{sourceFolder.build_source_folder}` directory? (Example: /aspnet/core)");
@@ -2146,7 +1922,7 @@ namespace CleanRepo
         /// <summary>
         /// Gets all *.yml files recursively, starting in the ancestor directory that contains docfx.json.
         /// </summary>
-        private static List<FileInfo> GetAllYamlFiles(string directoryPath, out DirectoryInfo rootDirectory)
+        internal static List<FileInfo> GetAllYamlFiles(string directoryPath, out DirectoryInfo rootDirectory)
         {
             // Look further up the path until we find docfx.json
             rootDirectory = GetDocFxDirectory(new DirectoryInfo(directoryPath));
@@ -2160,7 +1936,7 @@ namespace CleanRepo
         /// <summary>
         /// Gets all *.md files recursively, starting in the ancestor directory that contains docfx.json.
         /// </summary>
-        private static List<FileInfo> GetAllMarkdownFiles(string directoryPath, out DirectoryInfo rootDirectory)
+        internal static List<FileInfo> GetAllMarkdownFiles(string directoryPath, out DirectoryInfo rootDirectory)
         {
             // Look further up the path until we find docfx.json
             rootDirectory = GetDocFxDirectory(new DirectoryInfo(directoryPath));
@@ -2193,7 +1969,7 @@ namespace CleanRepo
         /// Returns the specified directory if it contains a file named "docfx.json".
         /// Otherwise returns the nearest parent directory that contains a file named "docfx.json".
         /// </summary>
-        private static DirectoryInfo GetDocFxDirectory(DirectoryInfo dir)
+        internal static DirectoryInfo GetDocFxDirectory(DirectoryInfo dir)
         {
             try
             {

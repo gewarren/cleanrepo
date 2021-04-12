@@ -24,6 +24,9 @@ namespace CleanRepo
         [Option("orphaned-images", HelpText = "Find orphaned .png, .gif, .jpg, or .svg files.")]
         public bool FindOrphanedImages { get; set; }
 
+        [Option("catalog-images", HelpText = "Map images to the markdown/YAML files that reference them.")]
+        public bool CatalogImages { get; set; }
+
         [Option("orphaned-snippets", HelpText = "Find orphaned .cs and .vb files.")]
         public bool FindOrphanedSnippets { get; set; }
 
