@@ -4,6 +4,7 @@ This command-line tool helps you clean up a DocFx-based content repo. It can:
 
 - Find and delete markdown files that aren't linked from a TOC file.
 - Find and delete orphaned image (.png, .jpg, .gif, .svg) files.
+- Map images to the files that reference them.
 - Find and delete orphaned "shared" markdown files (includes).
 - Find and replace links to redirected files.
 - Replace site-relative links with file-relative links (includes image links).
@@ -20,6 +21,7 @@ This command-line tool helps you clean up a DocFx-based content repo. It can:
 | --orphaned-images | Find orphaned .png, .gif, .svg, or .jpg files. |
 | --orphaned-snippets | Find orphaned .cs and .vb files. |
 | --orphaned-includes | Find orphaned INCLUDE files. |
+| --catalog-images | Map images to the markdown/YAML files that reference them. This option generates a JSON file with the output. |
 | --format-redirects | Format the redirection JSON file by deserializing and then serializing with pretty printing. |
 | --replace-redirects | Find backlinks to redirected files and replace with new target. |
 | --relative-links | Replace site-relative links with file-relative links.  You must also specify the docset name for the repo. |
@@ -29,6 +31,10 @@ This command-line tool helps you clean up a DocFx-based content repo. It can:
 - Find orphaned articles recursively (that is, in the specified directory and any subdirectories):
 
   ```
+  CleanRepo.exe --orphaned-topics
+  
+  -or-
+  
   CleanRepo.exe --orphaned-topics --start-directory c:\repos\visualstudio-docs-pr\docs\ide
   ```
 
@@ -37,20 +43,3 @@ This command-line tool helps you clean up a DocFx-based content repo. It can:
   ```
   CleanRepo.exe --orphaned-images --start-directory c:\repos\visualstudio-docs-pr\docs\ide
   ```
-
-- Find and delete shared markdown files that are orphaned (recursive):
-
-  ```
-  CleanRepo.exe --orphaned-includes --start-directory c:\repos\visualstudio-docs-pr\docs\ide
-
-- Find articles with backlinks to redirected topics, and replace the links with their target URL:
-
-  ```
-  CleanRepo.exe --replace-redirects --start-directory c:\repos\visualstudio-docs-pr\docs\ide
-  ```
-
-- Replace site-relative links with file-relative links, when the file exists (includes image links):
-
-  ```
-  CleanRepo.exe --relative-links -start-directory c:\repos\visualstudio-docs-pr\docs\ide
- ```
