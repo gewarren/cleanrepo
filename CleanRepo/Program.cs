@@ -16,6 +16,9 @@ using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
+// Publish command:
+// dotnet publish -c release -p:PublishSingleFile=true -r win10-x64 c:\users\gewarren\source\repos\cleanrepo\CleanRepo\CleanRepo.csproj
+
 namespace CleanRepo
 {
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Globalization", "CA1304:Specify CultureInfo", Justification = "Annoying")]

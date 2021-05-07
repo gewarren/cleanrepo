@@ -20,10 +20,11 @@ namespace CleanRepo
 
         private readonly string[] RegExes = new string[]
         {
-            @"\]\(([^\)]*?\.(png|jpg|gif|svg))", // [hello](media/how-to/xamarin.png)
+            @"\]\(([^\)]*?\.(png|jpg|gif|svg))", // ![hello](media/how-to/xamarin.png)
             "<img[^>]*?src[ ]*=[ ]*\"([^>]*?.(png|gif|jpg|svg))[ ]*\"", // <img data-hoverimage="./images/start.svg" src="./images/start.png" alt="Start icon" />
             @"\[.*\]:(.*\.(png|gif|jpg|svg))", // [0]: ../../media/how-to/xamarin.png
-            @"imageSrc:([^:]*\.(png|gif|jpg|svg))" // imageSrc: ./media/vs-mac.svg
+            @"imageSrc:([^:]*\.(png|gif|jpg|svg))", // imageSrc: ./media/vs-mac.svg
+            @"thumbnailUrl: (.*\.(png|gif|jpg|svg))" // thumbnailUrl: /thumbs/two-forest.png
         };
 
         // Constructor.
@@ -159,6 +160,7 @@ namespace CleanRepo
 
             // Find all image refs.
             Parallel.ForEach(MdAndYmlFiles, sourceFile =>
+            //foreach (var sourceFile in MdAndYmlFiles)
             {
                 foreach (string line in File.ReadAllLines(sourceFile.FullName))
                 {
