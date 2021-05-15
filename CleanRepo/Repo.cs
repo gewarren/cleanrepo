@@ -31,6 +31,12 @@ namespace CleanRepo
         public DocFxRepo(string inputDirectory)
         {
             DocFxDirectory = Program.GetDocFxDirectory(new DirectoryInfo(inputDirectory));
+
+            if (DocFxDirectory is null)
+            {
+                throw new ArgumentException("Unable to find a docfx.json file in the input directory or one of its ancestors.");
+            }
+
             BasePathUrl = Program.GetUrlBasePath(DocFxDirectory);
 
             // Gather media file names.

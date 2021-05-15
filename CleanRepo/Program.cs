@@ -92,7 +92,16 @@ namespace CleanRepo
                     return;
                 }
 
-                DocFxRepo repo = new DocFxRepo(options.InputDirectory);
+                DocFxRepo repo;
+                try
+                {
+                    repo = new DocFxRepo(options.InputDirectory);
+                }
+                catch (ArgumentException ex)
+                {
+                    Console.WriteLine(ex.Message);
+                    return;
+                }
 
                 // Check that this directory or one of its ancestors has a docfx.json file.
                 // I.e. we don't want it to be a parent directory of a docfx.json directory, so single docset only.
@@ -138,7 +147,16 @@ namespace CleanRepo
                     return;
                 }
 
-                DocFxRepo repo = new DocFxRepo(options.InputDirectory);
+                DocFxRepo repo;
+                try
+                {
+                    repo = new DocFxRepo(options.InputDirectory);
+                }
+                catch (ArgumentException ex)
+                {
+                    Console.WriteLine(ex.Message);
+                    return;
+                }
 
                 // Check that this directory or one of its ancestors has a docfx.json file.
                 // I.e. we don't want it to be a parent directory of a docfx.json directory, so single docset only.
@@ -1662,6 +1680,7 @@ namespace CleanRepo
         internal static string? GetUrlBasePath(DirectoryInfo docFxDirectory)
         {
             string docfxFilePath = Path.Combine(docFxDirectory.FullName, "docfx.json");
+            string urlBasePath = null;
 
             // Deserialize the docfx.json file.
             DocFx docfx = LoadDocfxFile(docfxFilePath);
@@ -1672,21 +1691,36 @@ namespace CleanRepo
 
             // Hack: Parse URL base path out of breadcrumbPath. Examples:
             // "breadcrumb_path": "/visualstudio/_breadcrumb/toc.json"
-            // "breadcrumb_path":  "/windows/uwp/breadcrumbs/toc.json"
-            // "breadcrumb_path":  "/dotnet/breadcrumb/toc.json"
+            // "breadcrumb_path": "/windows/uwp/breadcrumbs/toc.json"
+            // "breadcrumb_path": "/dotnet/breadcrumb/toc.json"
+            // "breadcrumb_path": "breadcrumb/toc.yml"  <--Need to handle this.
 
             string? breadcrumbPath = docfx.build.globalMetadata.breadcrumb_path;
 
             if (breadcrumbPath is not null)
             {
                 // Remove everything after and including the second last / character.
-                breadcrumbPath = breadcrumbPath[0..breadcrumbPath.LastIndexOf('/')];
-                return breadcrumbPath[0..breadcrumbPath.LastIndexOf('/')];
+                if (breadcrumbPath.Contains('/'))
+                {
+                    breadcrumbPath = breadcrumbPath[0..breadcrumbPath.LastIndexOf('/')];
+                    if (breadcrumbPath.Contains('/'))
+                    {
+                        urlBasePath = breadcrumbPath[0..breadcrumbPath.LastIndexOf('/')];
+                    }
+                }
             }
 
-                // We can't get the URL base path automatically, so ask the user.
-                Console.WriteLine($"What's the URL base path for articles in the `{docFxDirectory.FullName}` directory? (Example: /aspnet/core)");
-                return Console.ReadLine();
+            if (!String.IsNullOrEmpty(urlBasePath))
+            {
+                Console.WriteLine($"Is '{urlBasePath}' the correct URL base path for your docs? (Enter y or n)");
+                char key = Console.ReadKey().KeyChar;
+
+                if (key == 'y' || key == 'Y')
+                    return urlBasePath;
+            }
+
+            Console.WriteLine($"\nWhat's the URL base path for articles in the `{docFxDirectory.FullName}` directory? (Example: /aspnet/core)");
+            return Console.ReadLine();
         }
 
         /// <summary>
