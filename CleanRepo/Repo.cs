@@ -24,7 +24,9 @@ namespace CleanRepo
             "<img[^>]*?src[ ]*=[ ]*\"([^>]*?.(png|gif|jpg|svg))[ ]*\"", // <img data-hoverimage="./images/start.svg" src="./images/start.png" alt="Start icon" />
             @"\[.*\]:(.*\.(png|gif|jpg|svg))", // [0]: ../../media/how-to/xamarin.png
             @"imageSrc:([^:]*\.(png|gif|jpg|svg))", // imageSrc: ./media/vs-mac.svg
-            @"thumbnailUrl: (.*\.(png|gif|jpg|svg))" // thumbnailUrl: /thumbs/two-forest.png
+            @"thumbnailUrl: (.*\.(png|gif|jpg|svg))", // thumbnailUrl: /thumbs/two-forest.png
+            "lightbox=\"(.*?.(png|gif|jpg|svg))\"", // lightbox="media/azure.png"
+            ":::image [^:]*?source=\"(.*?.(png|gif|jpg|svg))\"" // :::image type="content" source="media/publish.png" alt-text="Publish dialog.":::
         };
 
         // Constructor.
@@ -176,27 +178,6 @@ namespace CleanRepo
                         foreach (Match match in Regex.Matches(line, regEx, RegexOptions.IgnoreCase))
                         {
                             string path = match.Groups[1].Value.Trim();
-                            string absolutePath = GetAbsolutePath(path, sourceFile);
-
-                            if (absolutePath != null)
-                            {
-                                TryAddLinkingFile(absolutePath, sourceFile.FullName);
-                            }
-                        }
-                    }
-
-                    // Match ::: image links
-                    // Example: :::image type="complex" source="./media/seedwork-classes.png" alt-text="Screenshot of SeedWork folder.":::
-                    // Example :::image type = "content" lightbox="../media/rpi-lightbox.png":::
-
-                    string tripleColonRegEx = @":::image .*?source=""[^:]*?\.(png|gif|jpg|svg)""[^:]*?:::";
-                    foreach (Match match in Regex.Matches(line, tripleColonRegEx, RegexOptions.IgnoreCase))
-                    {
-                        // There could be two images in this string - a source image and a lightbox image.
-                        string sourceOrLightboxRegEx = @"(source|lightbox)=""(.*?\.(png|gif|jpg|svg))""";
-                        foreach (Match submatch in Regex.Matches(match.Groups[0].Value, sourceOrLightboxRegEx, RegexOptions.IgnoreCase))
-                        {
-                            string path = submatch.Groups[2].Value.Trim();
                             string absolutePath = GetAbsolutePath(path, sourceFile);
 
                             if (absolutePath != null)

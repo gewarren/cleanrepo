@@ -57,7 +57,7 @@ namespace CleanRepo
                 if (options.Delete is null)
                 {
                     options.Delete = false;
-                    Console.WriteLine("\nDo you want to delete orphans (y or n)?\n");
+                    Console.WriteLine("\nDo you want to delete orphans (y or n)?");
                     var info = Console.ReadKey();
                     if (info.KeyChar == 'y' || info.KeyChar == 'Y')
                     {
@@ -121,7 +121,7 @@ namespace CleanRepo
                 if (options.Delete is null)
                 {
                     options.Delete = false;
-                    Console.WriteLine("\nDo you want to delete orphans (y or n)?\n");
+                    Console.WriteLine("\nDo you want to delete orphans (y or n)?");
                     var info = Console.ReadKey();
                     if (info.KeyChar == 'y' || info.KeyChar == 'Y')
                     {
@@ -194,7 +194,7 @@ namespace CleanRepo
                 if (options.Delete is null)
                 {
                     options.Delete = false;
-                    Console.WriteLine("\nDo you want to delete orphans (y or n)?\n");
+                    Console.WriteLine("\nDo you want to delete orphans (y or n)?");
                     var info = Console.ReadKey();
                     if (info.KeyChar == 'y' || info.KeyChar == 'Y')
                     {
@@ -232,7 +232,7 @@ namespace CleanRepo
                 if (options.Delete is null)
                 {
                     options.Delete = false;
-                    Console.WriteLine("\nDo you want to delete orphans (y or n)?\n");
+                    Console.WriteLine("\nDo you want to delete orphans (y or n)?");
                     var info = Console.ReadKey();
                     if (info.KeyChar == 'y' || info.KeyChar == 'Y')
                     {
@@ -1712,7 +1712,7 @@ namespace CleanRepo
 
             if (!String.IsNullOrEmpty(urlBasePath))
             {
-                Console.WriteLine($"Is '{urlBasePath}' the correct URL base path for your docs? (Enter y or n)");
+                Console.WriteLine($"Is '{urlBasePath}' the correct URL base path for your docs (y or n)?");
                 char key = Console.ReadKey().KeyChar;
 
                 if (key == 'y' || key == 'Y')
