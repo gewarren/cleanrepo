@@ -13,10 +13,6 @@ This command-line tool helps you clean up a DocFx-based content repo. It can:
 
 | Command | Description |
 | - | - |
-| --start-directory | Top-level directory in which to perform clean up (for example, find orphaned markdown files). |
-| --docset-root | The full path to the root directory for the docset, e.g. 'c:\users\gewarren\dotnet-docs\docs'. |
-| --repo-root | The full path to the local root directory for the repository, e.g. 'c:\users\gewarren\dotnet-docs'. |
-| --delete | True to delete orphaned files. |
 | --orphaned-topics | Use this option to find orphaned articles. |
 | --orphaned-images | Find orphaned .png, .gif, .svg, or .jpg files. |
 | --orphaned-snippets | Find orphaned .cs and .vb files. |
@@ -32,14 +28,16 @@ This command-line tool helps you clean up a DocFx-based content repo. It can:
 
   ```
   CleanRepo.exe --orphaned-topics
+  ```
   
-  -or-
+  The tool will prompt you for any additional information it needs for that function, for example, the directory to look in. However, you can also pass that option in with the initial command.
   
+  ```
   CleanRepo.exe --orphaned-topics --start-directory c:\repos\visualstudio-docs-pr\docs\ide
   ```
 
-- Find and delete orphaned .png/.gif/.jpg/.svg files (recursive):
+- Find and delete orphaned .png/.gif/.jpg/.svg files:
 
   ```
-  CleanRepo.exe --orphaned-images --start-directory c:\repos\visualstudio-docs-pr\docs\ide
+  CleanRepo.exe --orphaned-images
   ```
