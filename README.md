@@ -14,7 +14,7 @@ This command-line tool helps you clean up a DocFx-based content repo. It can:
 | Command | Description |
 | - | - |
 | --orphaned-topics | Use this option to find orphaned articles. |
-| --orphaned-images | Find orphaned .png, .gif, .svg, or .jpg files. |
+| --orphaned-images | Find orphaned .png, .gif, .svg, or .jpg files.<br/>**Note:** The tool does not know if images are referenced in a code sample project, so we recommend not running this option on a directory that contains samples. |
 | --orphaned-snippets | Find orphaned .cs and .vb files. |
 | --orphaned-includes | Find orphaned INCLUDE files. |
 | --catalog-images | Map images to the markdown/YAML files that reference them. This option generates a JSON file with the output. |
