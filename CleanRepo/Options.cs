@@ -50,5 +50,8 @@ namespace CleanRepo
 
         [Option("relative-links", HelpText = "Replace site-relative links with file-relative links.")]
         public bool ReplaceWithRelativeLinks { get; set; }
+
+        [Option("remove-hops", Required = false, HelpText = "Clean redirection JSON file by replacing targets that are themselves redirected (daisy chains).")]
+        public bool RemoveRedirectHops { get; set; }
     }
 }

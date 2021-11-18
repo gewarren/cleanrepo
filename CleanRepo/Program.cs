@@ -29,7 +29,7 @@ namespace CleanRepo
         {
 #if DEBUG
             //args = new[] { "--trim-redirects", "--docset-root=c:\\users\\gewarren\\dotnet-docs\\docs", "--lookback-days=90", "--output-file=c:\\users\\gewarren\\desktop\\clicks.txt" };
-            args = new[] { "--catalog-images" };
+            args = new[] { "--remove-hops" };
 #endif
 
             Parser.Default.ParseArguments<Options>(args).WithParsed(RunOptions);
@@ -467,6 +467,52 @@ namespace CleanRepo
 
                 // Check all links in these files.
                 ReplaceLinks(linkingFiles, urlBasePath, rootDirectory);
+            }
+            // Remove hops/daisy chains in master redirection file.
+            else if (options.RemoveRedirectHops)
+            {
+                // Get the directory that represents the docset.
+                if (String.IsNullOrEmpty(options.InputDirectory))
+                {
+                    Console.WriteLine("\nEnter the path to any directory in the docset:\n");
+                    options.InputDirectory = Console.ReadLine();
+                }
+                if (String.IsNullOrEmpty(options.InputDirectory) || !Directory.Exists(options.InputDirectory))
+                {
+                    Console.WriteLine("\nThat directory doesn't exist.");
+                    return;
+                }
+
+                // Check that this directory or one of its ancestors has a docfx.json file.
+                // I.e. we don't want it to be a parent directory of a docfx.json directory, so single docset only.
+                var directory = new DirectoryInfo(options.InputDirectory);
+                DirectoryInfo docfxDir = GetDocFxDirectory(directory);
+                if (docfxDir == null)
+                {
+                    Console.WriteLine("\nCould not find the docfx.json file for this directory.");
+                    return;
+                }
+
+                FileInfo redirectsFile = GetFile(options.InputDirectory, ".openpublishing.redirection.json");
+                if (redirectsFile == null)
+                {
+                    Console.WriteLine($"\nCould not find redirection file for directory '{options.InputDirectory}'.");
+                    return;
+                }
+
+                // Get the OPS config file.
+                FileInfo opsConfigFile = GetFile(options.InputDirectory, ".openpublishing.publish.config.json");
+                if (opsConfigFile == null)
+                {
+                    Console.WriteLine($"\nCouldn't find OPS config file for directory '{options.InputDirectory}'.");
+                    return;
+                }
+
+                // Get all docsets for the OPS config file.
+                Dictionary<string, string> docsets = GetDocsetInfo(opsConfigFile);
+
+                Console.WriteLine($"\nCleaning the '{redirectsFile.FullName}' redirection file.\n");
+                RemoveRedirectHops(redirectsFile, docsets);
             }
             // Nothing to do.
             else
@@ -1378,7 +1424,7 @@ namespace CleanRepo
         /// For each target URL, see if it's a source_path somewhere else.
         /// If so, replace the original target URL with the new target URL.
         /// </summary>
-        private static void RemoveRedirectHops(FileInfo redirectsFile, string basePathUrl, string docsetRootFolderName)
+        private static void RemoveRedirectHops(FileInfo redirectsFile, Dictionary<string, string> docsets)
         {
             RedirectFile redirectFile = LoadRedirectJson(redirectsFile);
             if (redirectFile is null)
@@ -1399,14 +1445,28 @@ namespace CleanRepo
             foreach (var redirectPair in redirectsLookup)
             {
                 string currentTarget = redirectPair.Value;
-                if (!currentTarget.StartsWith("/" + basePathUrl + "/"))
+
+                string rootFolderName = null;
+                string basePathUrl = null;
+                
+                foreach (var docset in docsets)
+                {
+                    if (currentTarget.StartsWith(docset.Value + "/"))
+                    {
+                        rootFolderName = docset.Key;
+                        basePathUrl = docset.Value;
+                        break;
+                    }
+                }
+
+                if (rootFolderName ==  null)
                 {
                     // Redirect URL is in a different docset/repo, so ignore it.
                     continue;
                 }
 
                 // Put the URL into the same format as source_path
-                string normalizedTargetPath = docsetRootFolderName + currentTarget.Remove(0, basePathUrl.Length + 1) + ".md";
+                string normalizedTargetPath = rootFolderName + currentTarget.Remove(0, basePathUrl.Length) + ".md";
 
                 // If we enter this loop, the target of a redirect is also the source of one or more redirects.
                 // Keep looping till you find the final target.
@@ -1421,13 +1481,7 @@ namespace CleanRepo
 
                     currentTarget = redirectsLookup[normalizedTargetPath];
 
-                    if (!currentTarget.StartsWith("/" + basePathUrl + "/"))
-                    {
-                        // Redirect URL is in a different docset/repo, so stop looking for further targets.
-                        break;
-                    }
-
-                    normalizedTargetPath = docsetRootFolderName + currentTarget.Remove(0, basePathUrl.Length + 1) + ".md";
+                    normalizedTargetPath = rootFolderName + currentTarget.Remove(0, basePathUrl.Length) + ".md";
                 }
 
                 if (redirectPair.Value != currentTarget)
@@ -1747,11 +1801,6 @@ namespace CleanRepo
                     continue;
                 }
 
-                // Hack: Parse URL base path out of breadcrumbPath. Examples:
-                // "breadcrumb_path": "/visualstudio/_breadcrumb/toc.json"
-                // "breadcrumb_path":  "/windows/uwp/breadcrumbs/toc.json"
-                // "breadcrumb_path":  "/dotnet/breadcrumb/toc.json"
-
                 string? breadcrumbPath = docfx.build.globalMetadata.breadcrumb_path;
                 string basePath = "";
 
@@ -1779,23 +1828,26 @@ namespace CleanRepo
                     // Construct the full path to where the docset files are located.
                     string docsetFilePath = sourceFolder.build_source_folder;
 
-                    if (item.src != null && item.src != ".")
+                    if (item.src != null)
                     {
-                        // Trim "./" off the beginning, if it's there.
-                        if (item.src.StartsWith("./"))
-                            item.src = item.src[2..];
-
-                        if (item.src.Length > 0)
+                        if (item.src != ".")
                         {
-                            if (docsetFilePath == ".")
-                                docsetFilePath = item.src;
-                            else
-                                docsetFilePath = String.Concat(docsetFilePath, "/", item.src);
-                        }
-                    }
+                            // Trim "./" off the beginning, if it's there.
+                            if (item.src.StartsWith("./"))
+                                item.src = item.src[2..];
 
-                    if (!mappingInfo.ContainsKey(docsetFilePath))
-                        mappingInfo.Add(docsetFilePath, basePath);
+                            if (item.src.Length > 0)
+                            {
+                                if (docsetFilePath == ".")
+                                    docsetFilePath = item.src;
+                                else
+                                    docsetFilePath = String.Concat(docsetFilePath, "/", item.src);
+                            }
+                        }
+
+                        if (!mappingInfo.ContainsKey(docsetFilePath))
+                            mappingInfo.Add(docsetFilePath, basePath);
+                    }
                 }
             }
 
