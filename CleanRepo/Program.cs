@@ -6,8 +6,6 @@ using System.Data;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Security;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -15,7 +13,7 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 // Publish command:
-// dotnet publish -c release -p:PublishSingleFile=true -r win10-x64 c:\users\gewarren\source\repos\cleanrepo\CleanRepo\CleanRepo.csproj
+// dotnet publish -c release -p:PublishSingleFile=true --no-self-contained -r win10-x64 c:\users\gewarren\cleanrepo\CleanRepo\CleanRepo.csproj
 
 namespace CleanRepo
 {
@@ -1681,7 +1679,7 @@ namespace CleanRepo
             return docsetPath;
         }
 
-        internal static string? GetUrlBasePath(DirectoryInfo docFxDirectory)
+        internal static string GetUrlBasePath(DirectoryInfo docFxDirectory)
         {
             string docfxFilePath = Path.Combine(docFxDirectory.FullName, "docfx.json");
             string urlBasePath = null;
@@ -1820,7 +1818,7 @@ namespace CleanRepo
         class OPSConfig
         {
             public List<Docset> docsets_to_publish { get; set; }
-            public List<string>? redirection_files { get; set; } = null;
+            public List<string> redirection_files { get; set; }
         }
         class Docset
         {
