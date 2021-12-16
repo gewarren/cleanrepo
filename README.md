@@ -7,6 +7,7 @@ This command-line tool helps you clean up a DocFx-based content repo. It can:
 - Map images to the files that reference them.
 - Find and delete orphaned "shared" markdown files (includes).
 - Find and replace links to redirected files.
+- Remove daisy chains (or hops) within a redirection file.
 - Replace site-relative links with file-relative links (includes image links).
 
 ## Usage
@@ -18,8 +19,8 @@ This command-line tool helps you clean up a DocFx-based content repo. It can:
 | --orphaned-snippets | Find orphaned .cs and .vb files. |
 | --orphaned-includes | Find orphaned INCLUDE files. |
 | --catalog-images | Map images to the markdown/YAML files that reference them. This option generates a JSON file with the output. |
-| --format-redirects | Format the redirection JSON file by deserializing and then serializing with pretty printing. |
 | --replace-redirects | Find backlinks to redirected files and replace with new target. |
+| --remove-hops | Remove daisy chains within a single redirection file. |
 | --relative-links | Replace site-relative links with file-relative links.  You must also specify the docset name for the repo. |
 
 ## Usage examples
