@@ -1,14 +1,12 @@
 ﻿using CleanRepo.Extensions;
 using CommandLine;
-using Kusto.Cloud.Platform.Data;
-using Kusto.Data;
-using Kusto.Data.Exceptions;
 using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Security;
 using System.Text;
 using System.Text.Json;
@@ -30,6 +28,7 @@ namespace CleanRepo
 #if DEBUG
             //args = new[] { "--trim-redirects", "--docset-root=c:\\users\\gewarren\\dotnet-docs\\docs", "--lookback-days=90", "--output-file=c:\\users\\gewarren\\desktop\\clicks.txt" };
             args = new[] { "--remove-hops" };
+            //args = new[] { "--replace-redirects" };
 #endif
 
             Parser.Default.ParseArguments<Options>(args).WithParsed(RunOptions);
@@ -252,94 +251,7 @@ namespace CleanRepo
 
                 ListOrphanedSnippets(options.InputDirectory, snippetFiles, options.Delete.Value);
             }
-            // Format master redirection file.
-            else if (options.FormatRedirectsFile)
-            {
-                // Obtain master redirection file.
-                if (String.IsNullOrEmpty(options.RepoRoot))
-                {
-                    Console.WriteLine("\nEnter the path to the root of the repository on your computer:");
-                    options.RepoRoot = Console.ReadLine();
-                }
-                if (String.IsNullOrEmpty(options.RepoRoot) || !Directory.Exists(options.RepoRoot))
-                {
-                    Console.WriteLine("\nThat directory doesn't exist.");
-                    return;
-                }
-                FileInfo redirectsFile = GetFile(options.RepoRoot, ".openpublishing.redirection.json");
-                if (redirectsFile == null)
-                {
-                    Console.WriteLine($"\nCouldn't find redirection file for directory '{options.RepoRoot}'.");
-                    return;
-                }
-
-                Console.WriteLine($"\nFormatting the '{redirectsFile.FullName}' file.");
-                FormatRedirectionFile(redirectsFile);
-            }
-            // Trim master redirection file.
-            else if (options.TrimRedirectsFile)
-            {
-                // Number of page view history days.
-                int days = options.LinkActivityDays;
-
-                // Obtain master redirection file.
-                if (String.IsNullOrEmpty(options.RepoRoot))
-                {
-                    Console.WriteLine("\nEnter the path to the root of the repository on your computer:");
-                    options.RepoRoot = Console.ReadLine();
-                }
-                if (String.IsNullOrEmpty(options.RepoRoot) || !Directory.Exists(options.RepoRoot))
-                {
-                    Console.WriteLine("\nThat directory doesn't exist.");
-                    return;
-                }
-                FileInfo redirectsFile = GetFile(options.RepoRoot, ".openpublishing.redirection.json");
-                if (redirectsFile == null)
-                {
-                    Console.WriteLine($"\nCouldn't find redirection file for directory '{options.RepoRoot}'.");
-                    return;
-                }
-
-                // Find the docset(s) and its URL base path.
-                FileInfo opsConfigFile = GetFile(options.RepoRoot, ".openpublishing.publish.config.json");
-                if (opsConfigFile == null)
-                {
-                    Console.WriteLine($"\nCouldn't find OPS config file for directory '{options.RepoRoot}'.");
-                    return;
-                }
-                Dictionary<string, string> docsets = GetDocsetInfo(opsConfigFile);
-
-                // Page view output.
-                if (String.IsNullOrEmpty(options.OutputFilePath))
-                {
-                    Console.WriteLine("Enter the name (and path) of a file to write the page view data to:");
-                    options.OutputFilePath = Console.ReadLine();
-
-                    // Check that the file is accessible so it actually works when we need it.
-                    FileInfo outputFile = new FileInfo(options.OutputFilePath);
-                    if (!File.Exists(outputFile.FullName))
-                    {
-                        try
-                        {
-                            outputFile.Create();
-                        }
-                        catch (Exception ex)
-                        {
-                            if (ex is SecurityException || ex is UnauthorizedAccessException)
-                            {
-                                Console.WriteLine($"Unable to create a file in {outputFile.DirectoryName}. Enter an accessible location.");
-                                return;
-                            }
-
-                            throw;
-                        }
-                    }
-                }
-
-                Console.WriteLine($"\nTrimming links in the '{redirectsFile.FullName}' file that haven't been clicked in the last {days} days.\n");
-                TrimRedirectEntries(redirectsFile, docsets, days, options.OutputFilePath);
-            }
-            // Replace links to topics that are redirected in the master redirection file
+            // Replace links to topics that are redirected in the master redirection file.
             else if (options.ReplaceRedirectTargets)
             {
                 // Get the directory in which to replace links.
@@ -372,21 +284,36 @@ namespace CleanRepo
                     return;
                 }
 
-                Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory for links to redirected topics...\n");
-
-                FileInfo redirectsFile = GetFile(options.InputDirectory, ".openpublishing.redirection.json");
-                if (redirectsFile == null)
+                // Get the OPS config file.
+                FileInfo opsConfigFile = GetFileHereOrInParent(options.InputDirectory, ".openpublishing.publish.config.json");
+                if (opsConfigFile == null)
                 {
-                    Console.WriteLine($"\nCould not find redirects file for directory '{options.InputDirectory}'.");
+                    Console.WriteLine($"\nCouldn't find OPS config file for directory '{options.InputDirectory}'.");
+                    return;
+                }
+                if (opsConfigFile.DirectoryName == null)
+                {
+                    Console.WriteLine("Could not determine directory name for OPS config file.");
                     return;
                 }
 
-                // Put all the redirected files in a list
-                IList<Redirect> redirects = GetAllRedirectedFiles(redirectsFile);
-                if (redirects is null)
+                Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory for links to redirected topics...\n");
+
+                // Get a list of all redirection files.
+                List<string> redirectionFiles = GetRedirectionFiles(opsConfigFile);
+
+                // Gather all the redirects.
+                List<Redirect> redirects = new List<Redirect>();
+                foreach (string redirectionFile in redirectionFiles)
                 {
-                    Console.WriteLine("\nDid not find any redirects in the file.");
-                    return;
+                    FileInfo redirectsFile = new FileInfo(Path.Combine(opsConfigFile.DirectoryName, redirectionFile));
+                    if (redirectsFile == null)
+                    {
+                        Console.WriteLine($"\nCould not find redirection file '{redirectionFile}'.");
+                        continue;
+                    }
+
+                    redirects.AddRange(GetAllRedirectedFiles(redirectsFile, opsConfigFile.DirectoryName));
                 }
 
                 // Get all the markdown and YAML files.
@@ -414,7 +341,7 @@ namespace CleanRepo
                 }
 
                 // Get the OPS config file.
-                FileInfo opsConfigFile = GetFile(options.InputDirectory, ".openpublishing.publish.config.json");
+                FileInfo opsConfigFile = GetFileHereOrInParent(options.InputDirectory, ".openpublishing.publish.config.json");
                 if (opsConfigFile == null)
                 {
                     Console.WriteLine($"\nCouldn't find OPS config file for directory '{options.InputDirectory}'.");
@@ -468,7 +395,7 @@ namespace CleanRepo
                 // Check all links in these files.
                 ReplaceLinks(linkingFiles, urlBasePath, rootDirectory);
             }
-            // Remove hops/daisy chains in master redirection file.
+            // Remove hops/daisy chains in a redirection file.
             else if (options.RemoveRedirectHops)
             {
                 // Get the directory that represents the docset.
@@ -493,26 +420,38 @@ namespace CleanRepo
                     return;
                 }
 
-                FileInfo redirectsFile = GetFile(options.InputDirectory, ".openpublishing.redirection.json");
-                if (redirectsFile == null)
-                {
-                    Console.WriteLine($"\nCould not find redirection file for directory '{options.InputDirectory}'.");
-                    return;
-                }
-
                 // Get the OPS config file.
-                FileInfo opsConfigFile = GetFile(options.InputDirectory, ".openpublishing.publish.config.json");
+                FileInfo opsConfigFile = GetFileHereOrInParent(options.InputDirectory, ".openpublishing.publish.config.json");
                 if (opsConfigFile == null)
                 {
                     Console.WriteLine($"\nCouldn't find OPS config file for directory '{options.InputDirectory}'.");
+                    return;
+                }
+                if (opsConfigFile.DirectoryName == null)
+                {
+                    Console.WriteLine("Could not determine directory name for OPS config file.");
                     return;
                 }
 
                 // Get all docsets for the OPS config file.
                 Dictionary<string, string> docsets = GetDocsetInfo(opsConfigFile);
 
-                Console.WriteLine($"\nCleaning the '{redirectsFile.FullName}' redirection file.\n");
-                RemoveRedirectHops(redirectsFile, docsets);
+                // Get a list of all redirection files.
+                List<string> redirectionFiles = GetRedirectionFiles(opsConfigFile);
+
+                // Remove hops within each file.
+                foreach (string redirectionFile in redirectionFiles)
+                {
+                    FileInfo redirectsFile = new FileInfo(Path.Combine(opsConfigFile.DirectoryName, redirectionFile));
+                    if (redirectsFile == null)
+                    {
+                        Console.WriteLine($"\nCould not find redirection file '{redirectionFile}'.");
+                        continue;
+                    }
+
+                    Console.WriteLine($"\nRemoving hops from the '{redirectionFile}' redirection file.\n");
+                    RemoveRedirectHops(redirectsFile, docsets, opsConfigFile.DirectoryName);
+                }
             }
             // Nothing to do.
             else
@@ -1159,20 +1098,40 @@ namespace CleanRepo
         #endregion
 
         #region Redirected files
-        class RedirectFile
+
+        private static RedirectionFile LoadRedirectJson(FileInfo redirectsFile)
         {
-            public IList<Redirect> redirections { get; set; }
+            using (StreamReader reader = new StreamReader(redirectsFile.FullName))
+            {
+                string json = reader.ReadToEnd();
+
+                try
+                {
+                    return JsonSerializer.Deserialize<RedirectionFile>(json);
+                }
+                catch (JsonException e)
+                {
+                    Console.WriteLine($"Caught exception while reading the {redirectsFile.FullName} file: {e.Message} {e.InnerException?.Message}");
+                    return null;
+                }
+            }
         }
 
-        class Redirect
+        private static void FormatRedirectionFile(FileInfo redirectsFileInfo)
         {
-            public string source_path { get; set; }
-            public string redirect_url { get; set; }
-            public bool? redirect_document_id { get; set; }
-            public IList<string> monikers { get; set; }
+            // Deserialize the redirect entries.
+            RedirectionFile RedirectionFile = LoadRedirectJson(redirectsFileInfo);
+            if (RedirectionFile is null)
+            {
+                Console.WriteLine("Deserialization failed.");
+                return;
+            }
+
+            // Serialize the redirects back to the file.
+            WriteRedirectJson(redirectsFileInfo.FullName, RedirectionFile);
         }
 
-        private static void WriteRedirectJson(string filePath, RedirectFile redirects)
+        private static void WriteRedirectJson(string filePath, RedirectionFile redirects)
         {
             JsonSerializerOptions options = new()
             {
@@ -1184,38 +1143,6 @@ namespace CleanRepo
             File.WriteAllText(filePath, json);
         }
 
-        private static RedirectFile LoadRedirectJson(FileInfo redirectsFile)
-        {
-            using (StreamReader reader = new StreamReader(redirectsFile.FullName))
-            {
-                string json = reader.ReadToEnd();
-
-                try
-                {
-                    return JsonSerializer.Deserialize<RedirectFile>(json);
-                }
-                catch (JsonException e)
-                {
-                    Console.WriteLine($"Caught exception while reading JSON file: {e.Message} {e.InnerException?.Message}");
-                    return null;
-                }
-            }
-        }
-
-        private static void FormatRedirectionFile(FileInfo redirectsFileInfo)
-        {
-            // Deserialize the redirect entries.
-            RedirectFile redirectFile = LoadRedirectJson(redirectsFileInfo);
-            if (redirectFile is null)
-            {
-                Console.WriteLine("Deserialization failed.");
-                return;
-            }
-
-            // Serialize the redirects back to the file.
-            WriteRedirectJson(redirectsFileInfo.FullName, redirectFile);
-        }
-
         /// <summary>
         /// For each source path in a redirect entry, check if it's been clicked in any locale
         /// in the last X days. If not, remove the redirect entry from the redirection file.
@@ -1224,8 +1151,8 @@ namespace CleanRepo
         {
             throw new NotImplementedException();
 
-            //RedirectFile redirectFile = LoadRedirectJson(redirectsFileInfo);
-            //if (redirectFile is null)
+            //RedirectionFile RedirectionFile = LoadRedirectJson(redirectsFileInfo);
+            //if (RedirectionFile is null)
             //{
             //    Console.WriteLine("Deserialization of redirection file failed.");
             //    return;
@@ -1240,16 +1167,16 @@ namespace CleanRepo
             //// For link-click output.
             //var sb = new StringBuilder();
 
-            ////for (int i = 0; i < redirectFile.redirections.Count && i < 50; i++)
-            //for (int i = 0; i < redirectFile.redirections.Count; i++)
+            ////for (int i = 0; i < RedirectionFile.redirections.Count && i < 50; i++)
+            //for (int i = 0; i < RedirectionFile.redirections.Count; i++)
             //{
             //    // Output for long-running jobs.
             //    if ((i % 50 == 0) && (i > 0))
             //    {
-            //        Console.WriteLine($"Progress update: Checked {i} of {redirectFile.redirections.Count} redirects.");
+            //        Console.WriteLine($"Progress update: Checked {i} of {RedirectionFile.redirections.Count} redirects.");
             //    }
 
-            //    Redirect redirect = redirectFile.redirections[i];
+            //    Redirect redirect = RedirectionFile.redirections[i];
 
             //    // If the redirect has a moniker, we don't know how to construct the URL, so ignore it.
             //    // TODO: To query page views on redirects with a moniker, 
@@ -1347,11 +1274,11 @@ namespace CleanRepo
             //// Remove any defunct redirects.
             //foreach (var redirect in noClickRedirects)
             //{
-            //    redirectFile.redirections.Remove(redirect);
+            //    RedirectionFile.redirections.Remove(redirect);
             //}
 
             //// Serialize the new list of redirects to the file.
-            //WriteRedirectJson(redirectsFileInfo.FullName, redirectFile);
+            //WriteRedirectJson(redirectsFileInfo.FullName, RedirectionFile);
 
             //// Write the link-click output to a file.
             //File.WriteAllText(outputFile, sb.ToString());
@@ -1424,10 +1351,10 @@ namespace CleanRepo
         /// For each target URL, see if it's a source_path somewhere else.
         /// If so, replace the original target URL with the new target URL.
         /// </summary>
-        private static void RemoveRedirectHops(FileInfo redirectsFile, Dictionary<string, string> docsets)
+        private static void RemoveRedirectHops(FileInfo redirectsFile, Dictionary<string, string> docsets, string rootPath)
         {
-            RedirectFile redirectFile = LoadRedirectJson(redirectsFile);
-            if (redirectFile is null)
+            RedirectionFile RedirectionFile = LoadRedirectJson(redirectsFile);
+            if (RedirectionFile is null)
             {
                 Console.WriteLine("Deserialization of redirection file failed.");
                 return;
@@ -1436,37 +1363,50 @@ namespace CleanRepo
             string fileText = File.ReadAllText(redirectsFile.FullName);
 
             // Load the sources and targets into a dictionary for easier look up.
-            Dictionary<string, string> redirectsLookup = new Dictionary<string, string>(redirectFile.redirections.Count);
-            foreach (Redirect redirect in redirectFile.redirections)
+            Dictionary<string, string> redirectsLookup = new Dictionary<string, string>(RedirectionFile.redirections.Count);
+            foreach (Redirect redirect in RedirectionFile.redirections)
             {
-                redirectsLookup.Add(redirect.source_path, redirect.redirect_url);
+                string fullPath = null;
+                if (redirect.source_path != null)
+                {
+                    // Construct the full path to the redirected file
+                    fullPath = Path.Combine(redirectsFile.DirectoryName, redirect.source_path);
+                }
+                else if (redirect.source_path_from_root != null)
+                {
+                    // Construct the full path to the redirected file
+                    fullPath = Path.Combine(rootPath, redirect.source_path_from_root.Substring(1));
+                }
+
+                redirectsLookup.Add(Path.GetFullPath(fullPath), redirect.redirect_url);
             }
 
             foreach (var redirectPair in redirectsLookup)
             {
                 string currentTarget = redirectPair.Value;
 
-                string rootFolderName = null;
+                string docsetRootFolderName = null;
                 string basePathUrl = null;
-                
+
                 foreach (var docset in docsets)
                 {
                     if (currentTarget.StartsWith(docset.Value + "/"))
                     {
-                        rootFolderName = docset.Key;
+                        docsetRootFolderName = docset.Key;
                         basePathUrl = docset.Value;
                         break;
                     }
                 }
 
-                if (rootFolderName ==  null)
+                if (docsetRootFolderName == null)
                 {
                     // Redirect URL is in a different docset/repo, so ignore it.
                     continue;
                 }
 
-                // Put the URL into the same format as source_path
-                string normalizedTargetPath = rootFolderName + currentTarget.Remove(0, basePathUrl.Length) + ".md";
+                // Formulate the full path for the redirect URL (so it matches the dictionary key format).
+                string targetPath = currentTarget.Remove(0, basePathUrl.Length) + ".md";
+                string normalizedTargetPath = Path.GetFullPath(Path.Combine(rootPath, docsetRootFolderName, targetPath[1..] /* Removes the initial forward slash */));
 
                 // If we enter this loop, the target of a redirect is also the source of one or more redirects.
                 // Keep looping till you find the final target.
@@ -1481,7 +1421,8 @@ namespace CleanRepo
 
                     currentTarget = redirectsLookup[normalizedTargetPath];
 
-                    normalizedTargetPath = rootFolderName + currentTarget.Remove(0, basePathUrl.Length) + ".md";
+                    targetPath = currentTarget.Remove(0, basePathUrl.Length) + ".md";
+                    normalizedTargetPath = Path.GetFullPath(Path.Combine(rootPath, docsetRootFolderName, targetPath[1..] /* Removes the initial forward slash */));
                 }
 
                 if (redirectPair.Value != currentTarget)
@@ -1496,17 +1437,17 @@ namespace CleanRepo
             File.WriteAllText(redirectsFile.FullName, fileText);
         }
 
-        private static IList<Redirect> GetAllRedirectedFiles(FileInfo redirectsFile)
+        private static IList<Redirect> GetAllRedirectedFiles(FileInfo redirectsFile, string rootPath)
         {
-            RedirectFile redirectFile = LoadRedirectJson(redirectsFile);
+            RedirectionFile RedirectionFile = LoadRedirectJson(redirectsFile);
 
-            if (redirectFile is null)
+            if (RedirectionFile is null)
             {
                 Console.WriteLine("Deserialization failed.");
                 return null;
             }
 
-            foreach (Redirect redirect in redirectFile.redirections)
+            foreach (Redirect redirect in RedirectionFile.redirections)
             {
                 if (redirect.source_path != null)
                 {
@@ -1516,16 +1457,26 @@ namespace CleanRepo
                     // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
                     fullPath = Path.GetFullPath(fullPath);
 
-                    redirect.source_path = fullPath;
+                    redirect.source_path_absolute = fullPath;
+                }
+                else if (redirect.source_path_from_root != null)
+                {
+                    // Construct the full path to the redirected file
+                    string fullPath = Path.Combine(rootPath, redirect.source_path_from_root.Substring(1));
+
+                    // This cleans up the path by replacing forward slashes with back slashes, removing extra dots, etc.
+                    fullPath = Path.GetFullPath(fullPath);
+
+                    redirect.source_path_absolute = fullPath;
                 }
             }
 
-            return redirectFile.redirections;
+            return RedirectionFile.redirections;
         }
 
         private static void ReplaceRedirectedLinks(IList<Redirect> redirects, List<FileInfo> linkingFiles, string docsetName)
         {
-            Dictionary<string, Redirect> redirectLookup = Enumerable.ToDictionary<Redirect, string>(redirects, r => r.source_path);
+            Dictionary<string, Redirect> redirectLookup = Enumerable.ToDictionary<Redirect, string>(redirects, r => r.source_path_absolute);
 
             // For each file...
             foreach (var linkingFile in linkingFiles)
@@ -1676,13 +1627,12 @@ namespace CleanRepo
         /// Looks for the specified file in the specified directory, and if not found,
         /// in all parent directories up to the disk root directory.
         /// </summary>
-        private static FileInfo GetFile(string inputDirectory, string fileName)
+        private static FileInfo GetFileHereOrInParent(string inputDirectory, string fileName)
         {
             DirectoryInfo dir = new DirectoryInfo(inputDirectory);
 
             try
             {
-                FileInfo[] files = dir.GetFiles(fileName, SearchOption.TopDirectoryOnly);
                 while (dir.GetFiles(fileName, SearchOption.TopDirectoryOnly).Length == 0)
                 {
                     dir = dir.Parent;
@@ -1777,6 +1727,18 @@ namespace CleanRepo
             return Console.ReadLine();
         }
 
+        private static List<string> GetRedirectionFiles(FileInfo opsConfigFile)
+        {
+            // Deserialize the OPS config file.
+            OPSConfig config = LoadOPSJson(opsConfigFile);
+            if (config == null || config.redirection_files == null)
+            {
+                return new List<string>() { ".openpublishing.redirection.json" };
+            }
+            else
+                return config.redirection_files;
+        }
+
         /// <summary>
         /// Pulls docset information, including URL base path, from the OPS config and docfx.json files.
         /// </summary>
@@ -1858,6 +1820,7 @@ namespace CleanRepo
         class OPSConfig
         {
             public List<Docset> docsets_to_publish { get; set; }
+            public List<string>? redirection_files { get; set; } = null;
         }
         class Docset
         {

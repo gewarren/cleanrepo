@@ -33,11 +33,11 @@ namespace CleanRepo
         [Option("orphaned-includes", HelpText = "Find orphaned INCLUDE files.")]
         public bool FindOrphanedIncludes { get; set; }
 
-        [Option("format-redirects", Required = false, HelpText = "Format the redirection JSON file by deserializing and then serializing with pretty printing.")]
-        public bool FormatRedirectsFile { get; set; }
+        //[Option("format-redirects", Required = false, HelpText = "Format the redirection JSON file by deserializing and then serializing with pretty printing.")]
+        //public bool FormatRedirectsFile { get; set; }
 
-        [Option("trim-redirects", Required = false, HelpText = "Remove redirect entries for links that haven't been clicked in the specified number of days.")]
-        public bool TrimRedirectsFile { get; set; }
+        //[Option("trim-redirects", Required = false, HelpText = "Remove redirect entries for links that haven't been clicked in the specified number of days.")]
+        //public bool TrimRedirectsFile { get; set; }
 
         [Option("lookback-days", Default = 180, HelpText = "The number of days to check for link-click activity.")]
         public int LinkActivityDays { get; set; }
