@@ -30,7 +30,7 @@ namespace CleanRepo
         // Constructor.
         public DocFxRepo(string inputDirectory)
         {
-            DocFxDirectory = Program.GetDocFxDirectory(new DirectoryInfo(inputDirectory));
+            DocFxDirectory = Program.GetDirectory(new DirectoryInfo(inputDirectory), "docfx.json");
 
             if (DocFxDirectory is null)
             {

@@ -25,8 +25,9 @@ namespace CleanRepo
         {
 #if DEBUG
             //args = new[] { "--trim-redirects", "--docset-root=c:\\users\\gewarren\\dotnet-docs\\docs", "--lookback-days=90", "--output-file=c:\\users\\gewarren\\desktop\\clicks.txt" };
-            args = new[] { "--remove-hops" };
+            //args = new[] { "--remove-hops" };
             //args = new[] { "--replace-redirects" };
+            args = new[] { "--orphaned-snippets" };
 #endif
 
             Parser.Default.ParseArguments<Options>(args).WithParsed(RunOptions);
@@ -267,7 +268,7 @@ namespace CleanRepo
                 // Check that this directory or one of its ancestors has a docfx.json file.
                 // I.e. we don't want it to be a parent directory of a docfx.json directory, so single docset only.
                 var directory = new DirectoryInfo(options.InputDirectory);
-                DirectoryInfo docfxDir = GetDocFxDirectory(directory);
+                DirectoryInfo docfxDir = GetDirectory(directory, "docfx.json");
                 if (docfxDir == null)
                 {
                     Console.WriteLine("\nCould not find the docfx.json file for this directory.");
@@ -357,7 +358,7 @@ namespace CleanRepo
                 // Check that this directory or one of its ancestors has a docfx.json file.
                 // I.e. we don't want it to be a parent directory of a docfx.json directory, so single docset only.
                 var directory = new DirectoryInfo(options.InputDirectory);
-                DirectoryInfo docfxDir = GetDocFxDirectory(directory);
+                DirectoryInfo docfxDir = GetDirectory(directory, "docfx.json");
                 if (docfxDir == null)
                 {
                     Console.WriteLine("\nCould not find the docfx.json file for this directory.");
@@ -411,7 +412,7 @@ namespace CleanRepo
                 // Check that this directory or one of its ancestors has a docfx.json file.
                 // I.e. we don't want it to be a parent directory of a docfx.json directory, so single docset only.
                 var directory = new DirectoryInfo(options.InputDirectory);
-                DirectoryInfo docfxDir = GetDocFxDirectory(directory);
+                DirectoryInfo docfxDir = GetDirectory(directory, "docfx.json");
                 if (docfxDir == null)
                 {
                     Console.WriteLine("\nCould not find the docfx.json file for this directory.");
@@ -802,10 +803,6 @@ namespace CleanRepo
             return snippetFiles;
         }
 
-        /// For each snippet file
-        ///    For each markdown file
-        ///       Do a RegEx search for the snippet file
-        ///          If found, BREAK to the next snippet file
         private static void ListOrphanedSnippets(string inputDirectory, List<string> snippetFiles, bool deleteOrphanedSnippets)
         {
             // Get all files that could possibly link to the snippet files
@@ -816,9 +813,19 @@ namespace CleanRepo
                 return;
             }
 
+            Console.WriteLine($"Checking {snippetFiles.Count} snippet files.");
+
             int countOfOrphans = 0;
             // Prints out the snippet files that have zero references.
             StringBuilder output = new StringBuilder();
+
+            // Keep track of which directories need to be deleted.
+            // We can't delete them as we go because then our list of snippet files
+            // will be inaccurate.
+            List<string> directoriesToDelete = new List<string>();
+
+            // Keep track of directories we know we have to preserve.
+            List<string> directoriesToKeep = new List<string>();
 
             foreach (var snippetFile in snippetFiles)
             {
@@ -827,63 +834,164 @@ namespace CleanRepo
 
                 bool foundSnippetReference = false;
 
-                foreach (FileInfo markdownFile in files)
+                // Check if there's a .csproj or .vbproj file in its ancestry.
+                bool partOfProject = false;
+                DirectoryInfo projectDir = GetDirectory(new DirectoryInfo(fi.DirectoryName), "*.??proj");
+                if (projectDir != null)
+                    partOfProject = true;
+
+                if (!partOfProject)
                 {
-                    // Matches the following types of snippet syntax:
-                    // :::code language="csharp" source="snippets/EventCounters/MinimalEventCounterSource.cs":::
-                    // [!code-csharp[Violation#1](../code-quality/codesnippet/CSharp/ca1010.cs)]
-
-                    string regex = @"(\(|"")([^\)""\n]*/" + snippetFileName + @")(\)|"")";
-
-                    Match match = Regex.Match(File.ReadAllText(markdownFile.FullName), regex);
-                    if (!(match is null))
+                    foreach (FileInfo markdownFile in files)
                     {
-                        string relativePath = match.Groups[2].Value.Trim();
+                        // Matches the following types of snippet syntax:
+                        // :::code language="csharp" source="snippets/EventCounters/MinimalEventCounterSource.cs":::
+                        // [!code-csharp[Violation#1](../code-quality/codesnippet/ca1010.cs)]
+                        // [!code-csharp[Violation#1](../code-quality/codesnippet/ca1010.cs#snippet1)]
 
-                        if (relativePath != null)
+                        string regex = @"(\(|"")([^\)""\n]*\/" + snippetFileName + @")#?\w*(\)|"")";
+
+                        foreach (Match match in Regex.Matches(File.ReadAllText(markdownFile.FullName), regex, RegexOptions.IgnoreCase))
                         {
-                            string fullPath;
-
-                            // Path could start with a tilde e.g. ~/snippets/ca1010.cs
-                            if (relativePath.StartsWith("~/"))
+                            if (!(match is null) && match.Length > 0)
                             {
-                                fullPath = Path.Combine(rootDirectory.FullName, relativePath.TrimStart('~', '/'));
-                            }
-                            else
-                            {
-                                // Construct the full path to the referenced snippet file
-                                fullPath = Path.Combine(markdownFile.DirectoryName, relativePath);
-                            }
+                                string relativePath = match.Groups[2].Value.Trim();
 
-                            // Clean up the path by replacing forward slashes with back slashes, removing extra dots, etc.
-                            fullPath = Path.GetFullPath(fullPath);
+                                if (relativePath != null)
+                                {
+                                    string fullPath;
 
-                            if (String.Equals(snippetFile, fullPath))
-                            {
-                                // This snippet file is not orphaned.
-                                foundSnippetReference = true;
-                                break;
+                                    // Path could start with a tilde e.g. ~/snippets/ca1010.cs
+                                    if (relativePath.StartsWith("~/"))
+                                    {
+                                        fullPath = Path.Combine(rootDirectory.FullName, relativePath.TrimStart('~', '/'));
+                                    }
+                                    else
+                                    {
+                                        // Construct the full path to the referenced snippet file
+                                        fullPath = Path.Combine(markdownFile.DirectoryName, relativePath);
+                                    }
+
+                                    // Clean up the path by replacing forward slashes with back slashes, removing extra dots, etc.
+                                    fullPath = Path.GetFullPath(fullPath);
+
+                                    if (String.Equals(snippetFile, fullPath, StringComparison.InvariantCultureIgnoreCase))
+                                    {
+                                        // This snippet file is not orphaned.
+                                        foundSnippetReference = true;
+                                        break;
+                                    }
+                                }
                             }
+                        }
+
+                        if (foundSnippetReference)
+                            break;
+                        // else check the next Markdown file.
+                    }
+
+                    if (!foundSnippetReference)
+                    {
+                        // The snippet file is orphaned (not used anywhere).
+                        countOfOrphans++;
+                        output.AppendLine(Path.GetFullPath(snippetFile));
+
+                        if (deleteOrphanedSnippets)
+                        {
+                            File.Delete(snippetFile);
                         }
                     }
                 }
-
-                if (!foundSnippetReference)
+                else
                 {
-                    // The snippet file is orphaned (not used anywhere).
-                    countOfOrphans++;
-                    output.AppendLine(Path.GetFullPath(snippetFile));
+                    // The code file is part of a project.
+                    // If any descendants of the project file directory
+                    // are referenced, then don't delete anything in the project file directory.
 
-                    if (deleteOrphanedSnippets)
+                    // If we already know this project directory is orphaned or unorphaned, move on.
+                    if (directoriesToDelete.Contains(projectDir.FullName)
+                        || directoriesToKeep.Contains(projectDir.FullName))
+                        continue;
+
+                    foreach (FileInfo markdownFile in files)
                     {
-                        File.Delete(snippetFile);
+                        // Matches the following types of snippet syntax:
+                        // :::code language="csharp" source="snippets/EventCounters/MinimalEventCounterSource.cs":::
+                        // [!code-csharp[Violation#1](../code-quality/codesnippet/CSharp/ca1010.cs)]
+
+                        // Search for a reference that includes the project directory name.
+                        string regex = @"(\(|"")([^\)""\n]*" + projectDir.Name + @")\/[^\)""\n]*(\)|"")";
+
+                        // Loop through all the matches in the file.
+                        MatchCollection matches = Regex.Matches(File.ReadAllText(markdownFile.FullName), regex, RegexOptions.IgnoreCase);
+                        foreach (Match match in matches)
+                        {
+                            if (!(match is null) && match.Length > 0)
+                            {
+                                string relativePath = match.Groups[2].Value.Trim();
+
+                                if (relativePath != null)
+                                {
+                                    string fullPath;
+
+                                    // Path could start with a tilde e.g. ~/snippets/stuff
+                                    if (relativePath.StartsWith("~/"))
+                                    {
+                                        fullPath = Path.Combine(rootDirectory.FullName, relativePath.TrimStart('~', '/'));
+                                    }
+                                    else
+                                    {
+                                        // Construct the full path to the referenced directory.
+                                        fullPath = Path.Combine(markdownFile.DirectoryName, relativePath);
+                                    }
+
+                                    // Clean up the path by replacing forward slashes with back slashes, removing extra dots, etc.
+                                    fullPath = Path.GetFullPath(fullPath);
+
+                                    if (String.Equals(projectDir.FullName, fullPath, StringComparison.InvariantCultureIgnoreCase))
+                                    {
+                                        // This snippet file is not orphaned.
+                                        foundSnippetReference = true;
+
+                                        // Add the project directory to the known list of directories to keep (saves searching again).
+                                        if (!directoriesToKeep.Contains(projectDir.FullName))
+                                            directoriesToKeep.Add(projectDir.FullName);
+
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+
+                        if (foundSnippetReference)
+                            break;
+                        // else check the next Markdown file.
+                    }
+
+                    if (!foundSnippetReference)
+                    {
+                        // The snippet file and its project directory is orphaned (not used anywhere).
+                        if (!directoriesToDelete.Contains(projectDir.FullName))
+                        {
+                            directoriesToDelete.Add(projectDir.FullName);
+                        }
                     }
                 }
             }
 
-            string deleted = deleteOrphanedSnippets ? "and deleted " : "";
+            // Delete orphaned directories.
+            Console.WriteLine($"Found {directoriesToDelete.Count} orphaned directories:\n");
 
-            Console.WriteLine($"\nFound {deleted}{countOfOrphans} orphaned snippet files:\n");
+            if (deleteOrphanedSnippets)
+            {
+                foreach (var directory in directoriesToDelete)
+                {
+                    Console.WriteLine(directory);
+                    Directory.Delete(directory, true);
+                }
+            }
+
+            Console.WriteLine($"\nFound {countOfOrphans} orphaned snippet files:\n");
             Console.WriteLine(output.ToString());
             Console.WriteLine("DONE");
         }
@@ -1975,7 +2083,7 @@ namespace CleanRepo
         internal static List<FileInfo> GetAllYamlFiles(string directoryPath, out DirectoryInfo rootDirectory)
         {
             // Look further up the path until we find docfx.json
-            rootDirectory = GetDocFxDirectory(new DirectoryInfo(directoryPath));
+            rootDirectory = GetDirectory(new DirectoryInfo(directoryPath), "docfx.json");
 
             if (rootDirectory is null)
                 return null;
@@ -1989,7 +2097,7 @@ namespace CleanRepo
         internal static List<FileInfo> GetAllMarkdownFiles(string directoryPath, out DirectoryInfo rootDirectory)
         {
             // Look further up the path until we find docfx.json
-            rootDirectory = GetDocFxDirectory(new DirectoryInfo(directoryPath));
+            rootDirectory = GetDirectory(new DirectoryInfo(directoryPath), "docfx.json");
 
             if (rootDirectory is null)
                 return null;
@@ -2007,7 +2115,7 @@ namespace CleanRepo
             DirectoryInfo dir = new DirectoryInfo(directoryPath);
 
             // Look further up the path until we find docfx.json
-            dir = GetDocFxDirectory(dir);
+            dir = GetDirectory(dir, "docfx.json");
 
             if (dir is null)
                 return null;
@@ -2016,20 +2124,19 @@ namespace CleanRepo
         }
 
         /// <summary>
-        /// Returns the specified directory if it contains a file named "docfx.json".
-        /// Otherwise returns the nearest parent directory that contains a file named "docfx.json".
+        /// Returns the specified directory if it contains a file with the specified name.
+        /// Otherwise returns the nearest parent directory that contains a file with the specified name.
         /// </summary>
-        internal static DirectoryInfo GetDocFxDirectory(DirectoryInfo dir)
+        internal static DirectoryInfo GetDirectory(DirectoryInfo dir, string fileName)
         {
             try
             {
-                while (dir.GetFiles("docfx.json", SearchOption.TopDirectoryOnly).Length == 0)
+                while (dir.GetFiles(fileName, SearchOption.TopDirectoryOnly).Length == 0)
                 {
                     dir = dir.Parent;
 
                     if (dir == dir?.Root)
                     {
-                        Console.WriteLine($"\nCould not find a directory containing docfx.json.");
                         return null;
                     }
                 }
