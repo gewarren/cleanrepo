@@ -27,7 +27,7 @@ namespace CleanRepo
             //args = new[] { "--trim-redirects", "--docset-root=c:\\users\\gewarren\\dotnet-docs\\docs", "--lookback-days=90", "--output-file=c:\\users\\gewarren\\desktop\\clicks.txt" };
             //args = new[] { "--remove-hops" };
             //args = new[] { "--replace-redirects" };
-            args = new[] { "--orphaned-topics" };
+            args = new[] { "--orphaned-snippets" };
 #endif
 
             Parser.Default.ParseArguments<Options>(args).WithParsed(RunOptions);
@@ -848,8 +848,10 @@ namespace CleanRepo
                         // :::code language="csharp" source="snippets/EventCounters/MinimalEventCounterSource.cs":::
                         // [!code-csharp[Violation#1](../code-quality/codesnippet/ca1010.cs)]
                         // [!code-csharp[Violation#1](../code-quality/codesnippet/ca1010.cs#snippet1)]
+                        // [!code-csharp[Hi](./code/code.cs?highlight=1,6)]
+                        // [!code-csharp[FxCop.Usage#1](./code/code.cs?range=3-6)]
 
-                        string regex = @"(\(|"")([^\)""\n]*\/" + snippetFileName + @")#?\w*(\)|"")";
+                        string regex = @"(\(|"")([^\)""\n]*\/" + snippetFileName + @")(#\w*)?(\?\w*=(\d|,|-)*)?(\)|"")";
 
                         foreach (Match match in Regex.Matches(File.ReadAllText(markdownFile.FullName), regex, RegexOptions.IgnoreCase))
                         {
