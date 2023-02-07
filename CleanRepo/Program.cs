@@ -27,7 +27,7 @@ namespace CleanRepo
             //args = new[] { "--trim-redirects", "--docset-root=c:\\users\\gewarren\\dotnet-docs\\docs", "--lookback-days=90", "--output-file=c:\\users\\gewarren\\desktop\\clicks.txt" };
             //args = new[] { "--remove-hops" };
             //args = new[] { "--replace-redirects" };
-            args = new[] { "--orphaned-snippets" };
+            args = new[] { "--orphaned-topics" };
 #endif
 
             Parser.Default.ParseArguments<Options>(args).WithParsed(RunOptions);
@@ -66,7 +66,7 @@ namespace CleanRepo
                 Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory and its subdirectories for orphaned topics...");
 
                 List<FileInfo> tocFiles = GetTocFiles(options.InputDirectory);
-                List<FileInfo> markdownFiles = GetMarkdownFiles(options.InputDirectory);
+                List<FileInfo> markdownFiles = GetMarkdownFiles(options.InputDirectory, "snippets");
 
                 if (tocFiles is null || markdownFiles is null)
                 {
@@ -2062,10 +2062,21 @@ namespace CleanRepo
         /// <summary>
         /// Gets all *.md files recursively, starting in the specified directory.
         /// </summary>
-        private static List<FileInfo> GetMarkdownFiles(string directoryPath)
+        private static List<FileInfo> GetMarkdownFiles(string directoryPath, params string[] dirsToIgnore)
         {
             DirectoryInfo dir = new DirectoryInfo(directoryPath);
-            return dir.EnumerateFiles("*.md", SearchOption.AllDirectories).ToList();
+            IEnumerable<FileInfo> files = dir.EnumerateFiles("*.md", SearchOption.AllDirectories).ToList();
+
+            if (dirsToIgnore.Length > 0)
+            {
+                foreach (string ignoreDir in dirsToIgnore)
+                {
+                    string dirWithSlashes = String.Concat("\\", ignoreDir, "\\");
+                    files = files.Where(f => !f.DirectoryName.Contains(dirWithSlashes, StringComparison.InvariantCultureIgnoreCase));
+                }
+            }
+
+            return files.ToList();
         }
 
         /// <summary>
