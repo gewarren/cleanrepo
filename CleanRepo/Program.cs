@@ -480,7 +480,7 @@ namespace CleanRepo
                 // For more information, see [this page](/test-repo/debugger/dbg-tips).
 
                 // Find links that look like [link text](/docsetName/some other text)
-                string pattern1 = @"\]\((/" + urlBasePath + @"/([^\)\s]*))";
+                string pattern1 = @"\]\(<?(/" + urlBasePath + @"/([^\)\s]*)>?\)";
 
                 foreach (Match match in Regex.Matches(originalFileText, pattern1, RegexOptions.IgnoreCase))
                 {
@@ -654,7 +654,7 @@ namespace CleanRepo
                     // E.g. [!INCLUDE [P2S FAQ All](vpn-gateway-faq-p2s-all-include.md)]
 
                     // RegEx pattern to match
-                    string includeLinkPattern = @"\[!INCLUDE[ ]?\[[^\]]*?\]\((.*?\.md)";
+                    string includeLinkPattern = @"\[!INCLUDE[ ]?\[[^\]]*?\]\(<?(.*?\.md)";
 
                     // There could be more than one INCLUDE reference on the line, hence the foreach loop.
                     foreach (Match match in Regex.Matches(line, includeLinkPattern, RegexOptions.IgnoreCase))
@@ -1082,7 +1082,7 @@ namespace CleanRepo
 
             string linkRegEx = tocFile.Extension.ToLower() == ".yml" ?
                 @"href:(.*?" + linkedFile.Name + ")" :
-                @"\]\((([^\)])*?" + linkedFile.Name + @")";
+                @"\]\(<?(([^\)])*?" + linkedFile.Name + @")";
 
             // For each link that contains the file name...
             foreach (Match match in Regex.Matches(text, linkRegEx, RegexOptions.IgnoreCase))
@@ -1148,7 +1148,7 @@ namespace CleanRepo
             {
                 string linkRegEx = linkingFile.Extension.ToLower() == ".yml" ?
                         @"href:(.*?" + linkedFile.Name + ")" :
-                        @"\]\((([^\)])*?" + linkedFile.Name + @")";
+                        @"\]\(<?(([^\)])*?" + linkedFile.Name + @")";
 
                 // For each link that contains the file name...
                 foreach (Match match in Regex.Matches(fileContents, linkRegEx, RegexOptions.IgnoreCase))
@@ -1595,7 +1595,7 @@ namespace CleanRepo
                 // Matches link with optional #bookmark on the end.
                 string linkRegEx = linkingFile.Extension.ToLower() == ".yml" ?
                     @"href:(.*\.md)(#[\w-]+)?" :
-                    @"\]\(([^\)]*\.md)(#[\w-]+)?\)";
+                    @"\]\(<?([^\)]*\.md)(#[\w-]+)?>?\)";
 
                 // For each link in the file...
                 foreach (Match match in Regex.Matches(text, linkRegEx, RegexOptions.IgnoreCase))
@@ -1606,7 +1606,7 @@ namespace CleanRepo
                     if (relativePath.StartsWith("http"))
                     {
                         // This could be an absolute URL to a file in the repo, so check.
-                        string httpRegex = @"https?:\/\/docs.microsoft.com\/([A-z][A-z]-[A-z][A-z]\/)?" + docsetName + @"\/";
+                        string httpRegex = @"https?:\/\/learn.microsoft.com\/([A-z][A-z]-[A-z][A-z]\/)?" + docsetName + @"\/";
                         var httpMatch = Regex.Match(relativePath, httpRegex, RegexOptions.IgnoreCase);
 
                         if (!httpMatch.Success)
@@ -1615,7 +1615,7 @@ namespace CleanRepo
                             continue;
                         }
 
-                        // Chop off the https://docs.microsoft.com/docset/ part of the path.
+                        // Chop off the https://learn.microsoft.com/docset/ part of the path.
                         relativePath = relativePath.Substring(httpMatch.Value.Length);
                     }
 
@@ -2011,7 +2011,7 @@ namespace CleanRepo
 
                 string linkRegEx = linkingFile.Extension.ToLower() == ".yml" ?
                     @"href:(.*?" + linkedFile.Name + ")" :
-                    @"\]\((([^\)])*?" + linkedFile.Name + @")";
+                    @"\]\(<?(([^\)])*?" + linkedFile.Name + @")";
 
                 // For each link that contains the file name...
                 foreach (Match match in Regex.Matches(line, linkRegEx, RegexOptions.IgnoreCase))
