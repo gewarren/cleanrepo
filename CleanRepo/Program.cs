@@ -1829,14 +1829,14 @@ namespace CleanRepo
 
                 if (key == 'y' || key == 'Y')
                 {
-                    Console.WriteLine("Thanks!");
+                    Console.WriteLine("\nThanks!");
                     return urlBasePath;
                 }
             }
 
             Console.WriteLine($"\nWhat's the URL base path for articles in the `{docFxDirectory.FullName}` directory? (Example: /aspnet/core)");
             string basePath = Console.ReadLine();
-            Console.WriteLine("Thanks!");
+            Console.WriteLine("\nThanks!");
             return basePath;
         }
 
