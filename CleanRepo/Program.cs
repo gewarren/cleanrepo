@@ -27,7 +27,7 @@ namespace CleanRepo
             //args = new[] { "--trim-redirects", "--docset-root=c:\\users\\gewarren\\dotnet-docs\\docs", "--lookback-days=90", "--output-file=c:\\users\\gewarren\\desktop\\clicks.txt" };
             //args = new[] { "--remove-hops" };
             //args = new[] { "--replace-redirects" };
-            args = new[] { "--orphaned-snippets" };
+            args = new[] { "--orphaned-images" };
 #endif
 
             Parser.Default.ParseArguments<Options>(args).WithParsed(RunOptions);

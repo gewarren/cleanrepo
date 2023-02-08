@@ -154,8 +154,6 @@ namespace CleanRepo
         /// [0]: ../../media/vs-acr-provisioning-dialog-2019.png
         /// :::image type = "complex" source="./media/seedwork-classes.png" alt-text="Screenshot of the SeedWork folder.":::
         /// :::image type = "content" source="../media/rpi.png" lightbox="../media/rpi-lightbox.png":::
-        /// 
-        /// Does not currently support file names that contain parentheses: [VS image] (../media/pic(azure)_1.png)
         /// </summary>
         private void CatalogImages()
         {
@@ -282,6 +280,10 @@ namespace CleanRepo
             if (ImageRefs.ContainsKey(key))
             {
                 ImageRefs[key].Add(linkingFile);
+            }
+            else if (ImageRefs.ContainsKey(System.Web.HttpUtility.UrlDecode(key)))
+            {
+                ImageRefs[System.Web.HttpUtility.UrlDecode(key)].Add(linkingFile);
             }
         }
     }
