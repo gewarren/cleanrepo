@@ -24,7 +24,8 @@ namespace CleanRepo
             @"imageSrc:([^:]*\.(png|gif|jpg|svg))", // imageSrc: ./media/vs-mac.svg
             @"thumbnailUrl: (.*\.(png|gif|jpg|svg))", // thumbnailUrl: /thumbs/two-forest.png
             "lightbox=\"(.*?.(png|gif|jpg|svg))\"", // lightbox="media/azure.png"
-            ":::image [^:]*?source=\"(.*?.(png|gif|jpg|svg))\"" // :::image type="content" source="media/publish.png" alt-text="Publish dialog.":::
+            ":::image [^:]*?source=\"(.*?.(png|gif|jpg|svg))\"", // :::image type="content" source="media/publish.png" alt-text="Publish dialog.":::
+            "<a href=\"([^\"]*?\\.(png|gif|jpg|svg))\"" // <a href="./media/job-large.png" target="_blank"><img src="./media/job-small.png"></a>
         };
 
         // Constructor.

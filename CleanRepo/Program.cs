@@ -1828,11 +1828,16 @@ namespace CleanRepo
                 char key = Console.ReadKey().KeyChar;
 
                 if (key == 'y' || key == 'Y')
+                {
+                    Console.WriteLine("Thanks!");
                     return urlBasePath;
+                }
             }
 
             Console.WriteLine($"\nWhat's the URL base path for articles in the `{docFxDirectory.FullName}` directory? (Example: /aspnet/core)");
-            return Console.ReadLine();
+            string basePath = Console.ReadLine();
+            Console.WriteLine("Thanks!");
+            return basePath;
         }
 
         private static List<string> GetRedirectionFiles(FileInfo opsConfigFile)
