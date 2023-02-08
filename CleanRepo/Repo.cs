@@ -90,38 +90,45 @@ namespace CleanRepo
         ///    For each markdown file
         ///       Do a RegEx search for the image
         ///          If found, BREAK to the next image
-        internal void ListOrphanedImages(bool deleteOrphanedImages)
+        internal void ListOrphanedImages(bool deleteOrphanedImages, params string[] dirsToIgnore)
         {
             // Find all image references.
             CatalogImages();
 
             int orphanedCount = 0;
 
-            // Print out the image files with zero references.
+            // Print out (and delete) the image files with zero references.
             StringBuilder output = new StringBuilder();
             foreach (var image in ImageRefs)
             {
                 if (image.Value.Count == 0)
                 {
-                    orphanedCount++;
-                    output.AppendLine(Path.GetFullPath(image.Key));
-                }
-            }
-
-            if (deleteOrphanedImages)
-            {
-                // Delete orphaned image files
-                foreach (var image in ImageRefs)
-                {
-                    if (image.Value.Count == 0)
+                    bool ignoreImageFile = false;
+                    // Check if the image is in an ignored directory.
+                    foreach (string dirToIgnore in dirsToIgnore)
                     {
-                        try
+                        if (image.Key.Contains(dirToIgnore, StringComparison.InvariantCultureIgnoreCase))
                         {
-                            File.Delete(image.Key);
+                            ignoreImageFile = true;
+                            break;
                         }
-                        catch (PathTooLongException)
+                    }
+
+                    if (!ignoreImageFile)
+                    {
+                        orphanedCount++;
+                        output.AppendLine(Path.GetFullPath(image.Key));
+
+                        if (deleteOrphanedImages)
                         {
-                            output.AppendLine($"Unable to delete {image.Key} because its path is too long.");
+                            try
+                            {
+                                File.Delete(image.Key);
+                            }
+                            catch (PathTooLongException)
+                            {
+                                output.AppendLine($"Unable to delete {image.Key} because its path is too long.");
+                            }
                         }
                     }
                 }

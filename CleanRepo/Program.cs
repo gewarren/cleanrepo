@@ -129,7 +129,7 @@ namespace CleanRepo
 
                 Console.WriteLine($"\nSearching the '{options.InputDirectory}' directory recursively for orphaned .png/.jpg/.gif/.svg files...\n");
 
-                repo.ListOrphanedImages(options.Delete.Value);
+                repo.ListOrphanedImages(options.Delete.Value, "snippets");
             }
             else if (options.CatalogImages)
             {
