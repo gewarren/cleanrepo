@@ -1759,6 +1759,65 @@ namespace CleanRepo
             }
         }
 
+        public static string ConvertImagePathSrcToDest(string docfxFilePath, string currentImagePath)
+        {
+            // Deserialize the docfx.json file.
+            DocFx docfx = LoadDocfxFile(Path.Combine(docfxFilePath, "docfx.json"));
+            if (docfx == null)
+            {
+                return null;
+            }
+
+            foreach (var entry in docfx.build.resource)
+            {
+                if (entry.src == null || entry.dest == null)
+                    continue;
+
+                if (entry.src.TrimEnd('/') == ".")
+                    return Path.Combine(entry.dest, currentImagePath);
+
+                if (!currentImagePath.StartsWith(entry.src))
+                    continue;
+
+                // If we get here, the path starts with entry.src,
+                // so replace that part of the path with whatever entry.dest is.
+                return Path.Combine(entry.dest, currentImagePath.Substring(entry.src.Length));
+            }
+
+            // We didn't find any useful info in the docfx.json file, so just return the same string back.
+            return currentImagePath;
+        }
+
+        public static string ConvertImagePathDestToSrc(string docfxFilePath, string currentImagePath)
+        {
+            // Deserialize the docfx.json file.
+            DocFx docfx = LoadDocfxFile(Path.Combine(docfxFilePath, "docfx.json"));
+            if (docfx == null)
+            {
+                return null;
+            }
+
+            foreach (var entry in docfx.build.resource)
+            {
+                if (entry.src == null || entry.dest == null)
+                    continue;
+
+                // This one applies to the dotnet/docs repo.
+                if (entry.dest.TrimEnd('/') == ".")
+                    return Path.Combine(entry.src, currentImagePath);
+
+                if (!currentImagePath.StartsWith(entry.dest))
+                    continue;
+
+                // If we get here, the path starts with entry.dest,
+                // so replace that part of the path with whatever entry.src is.
+                return Path.Combine(entry.src, currentImagePath.Substring(entry.dest.Length));
+            }
+
+            // We didn't find any useful info in the docfx.json file, so just return the same string back.
+            return currentImagePath;
+        }
+
         private static string GetDocsetAbsolutePath(string docfxFilePath, DirectoryInfo inputDirectory)
         {
             // Deserialize the docfx.json file.
@@ -1947,6 +2006,12 @@ namespace CleanRepo
         {
             public GlobalMetadata globalMetadata { get; set; }
             public List<Content> content { get; set; }
+            public List<Resource> resource { get; set; }
+        }
+        class Resource
+        {
+            public string src { get; set; }
+            public string dest { get; set; }
         }
         class Content
         {
